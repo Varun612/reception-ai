@@ -11,6 +11,31 @@
 
 ---
 
+## 🌟 About ReceptionAI & Live Service Directory
+
+**ReceptionAI** is a production-oriented, multi-tenant SaaS platform that empowers appointment-based healthcare businesses—beginning with dental practices across the United States, United Kingdom, Canada, and Australia—to deploy autonomous, 24/7 AI receptionists. 
+
+Unlike generic chatbots, ReceptionAI combines deterministic tool-calling, real calendar availability engines, in-browser voice recording studios, omnichannel Call-to-Chat SMS workflows, multi-click request deduplication, and deep customer interaction telemetry into a HIPAA-aware clinical booking infrastructure.
+
+### 🔗 Live Interactive Service Directory
+
+Click any link below to explore the live services created in this platform:
+
+| Live Service | URL / Route | Audience & Purpose | Access |
+| :--- | :--- | :--- | :--- |
+| **🌐 Interactive About Page** | [**/about**](http://localhost:5180/about) | Full architectural overview, enterprise healthcare design patterns, and platform directory. | Public |
+| **📱 Call-to-Chat Visual Slot Picker** | [**/book-chat/apex-dental-spa**](http://localhost:5180/book-chat/apex-dental-spa) | Mobile visual booking link texted to telephone callers. Patients select chairs, treatments, and complete structured clinical intake with multi-click protection. | Public |
+| **🎙️ AI Phone Receptionist & Voice Studio** | [**/dashboard/phone**](http://localhost:5180/dashboard/phone) | Autonomous telephone attendance engine with AI voices (*Nova*, *Alloy*, *Echo*) and an in-browser microphone audio studio for clinic owners to record custom greetings. | Clinic Vendor |
+| **📊 Patient Journey Telemetry & Metadata** | [**/dashboard/telemetry**](http://localhost:5180/dashboard/telemetry) | Medical vendor analytics to study customer touchpoints, funnel drop-offs, device/browser metadata, and live counts of duplicate clicks prevented. | Clinic Vendor |
+| **💬 Embeddable Website Widget** | [**/embed/apex-dental-spa**](http://localhost:5180/embed/apex-dental-spa) | Standalone iframe and drop-in snippet (`<script src="/widget.js">`) rendering an AI booking receptionist directly on existing clinic websites. | Public |
+| **🧪 Zero-Hallucination Booking Sandbox** | [**/demo**](http://localhost:5180/demo) | Interactive clinical sandbox testing deterministic tool calling, real calendar calculations, price quoting, and dental triage guardrails. | Public |
+| **🛡️ Multi-Tenant Super-Admin Control Plane** | [**/admin**](http://localhost:5180/admin) | Platform owner command center to monitor cross-tenant appointments, MRR subscriptions, system health, and global click deduplication telemetry. | Super-Admin |
+| **🏠 SaaS Landing Page & Live Demo** | [**/**](http://localhost:5180/) | Premium B2B marketing website with interactive live receptionist chat demo, 3-step setup, pricing cards, and FAQ. | Public |
+
+> 💡 *Note: When running locally, links point to `http://localhost:5180`. On cloud deployments (Render/Vercel), replace the host with your production URL.*
+
+---
+
 ## 1. Product Overview
 
 **ReceptionAI** is a multi-tenant, subscription-based B2B SaaS platform that enables appointment-based businesses—starting with dental clinics in the US, UK, Canada, and Australia—to deploy autonomous, 24/7 AI receptionists that handle patient inquiries and book appointments directly into their calendar.
@@ -94,7 +119,7 @@ npm run db:seed
 ```bash
 npm test
 ```
-*Executes all 7 integration test suites: Authentication, Multi-Tenant Data Isolation, Concurrency Double-Booking Prevention, Dental Safety Triage, Public Chat Widget, Super-Admin Control Plane, and AI Phone Receptionist with Call-to-Chat & Dual Confirmations.*
+*Executes all 8 integration test suites: Authentication, Multi-Tenant Data Isolation, Concurrency Double-Booking Prevention, Dental Safety Triage, Public Chat Widget, Super-Admin Control Plane, AI Phone Receptionist with Call-to-Chat & Dual Confirmations, and Multi-Click Deduplication with Customer Telemetry.*
 
 ### Step 4: Start Applications
 ```bash
