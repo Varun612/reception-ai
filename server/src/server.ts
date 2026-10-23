@@ -126,7 +126,24 @@ app.use('/api/tenants', telephonyRouter);
 app.use('/api/telemetry', telemetryRouter);
 app.use('/api', telemetryRouter);
 
-// Health check
+// Health check & root status endpoints
+app.get('/', (req, res) => {
+  res.json({
+    service: 'ReceptionAI Multi-Tenant API',
+    status: 'online',
+    version: '1.0.0',
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+  });
+});
+
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'healthy',
