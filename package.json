@@ -1,0 +1,19 @@
+{
+  "name": "reception-ai-monorepo",
+  "version": "1.0.0",
+  "description": "ReceptionAI - Multi-Tenant AI Receptionist & Appointment Booking SaaS",
+  "private": true,
+  "scripts": {
+    "server:install": "cd server && npm install",
+    "client:install": "cd client && npm install",
+    "install:all": "npm run server:install && npm run client:install",
+    "server:dev": "cd server && npm run dev",
+    "client:dev": "cd client && npm run dev",
+    "db:migrate": "cd server && npm run db:migrate",
+    "db:seed": "cd server && npm run db:seed",
+    "test": "cd server && npm test"
+  },
+  "keywords": ["ai-receptionist", "saas", "multi-tenant", "appointment-booking", "dental-saas"],
+  "author": "ReceptionAI Team",
+  "license": "MIT"
+}

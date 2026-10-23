@@ -1,0 +1,362 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id                   String                 @id @default(cuid())
+  slug                 String                 @unique
+  name                 String
+  status               String                 @default("ACTIVE") // ACTIVE, SUSPENDED, ONBOARDING
+  timeZone             String                 @default("America/Chicago")
+  currency             String                 @default("USD")
+  country              String                 @default("US")
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  memberships          TenantMembership[]
+  businessProfile      BusinessProfile?
+  services             Service[]
+  staffMembers         StaffMember[]
+  businessHours        BusinessHour[]
+  bookingPolicy        BookingPolicy?
+  appointments         Appointment[]
+  customers            Customer[]
+  conversations        Conversation[]
+  agentConfiguration   AgentConfiguration?
+  knowledgeDocuments   KnowledgeDocument[]
+  calendarIntegrations CalendarIntegration[]
+  subscription         Subscription?
+  usageRecords         UsageRecord[]
+  auditLogs            AuditLog[]
+  notificationJobs     NotificationJob[]
+}
+
+model User {
+  id              String             @id @default(cuid())
+  email           String             @unique
+  passwordHash    String
+  fullName        String
+  isPlatformAdmin Boolean            @default(false)
+  emailVerified   Boolean            @default(true)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  memberships     TenantMembership[]
+  auditLogs       AuditLog[]
+}
+
+model TenantMembership {
+  id        String   @id @default(cuid())
+  tenantId  String
+  userId    String
+  role      String   @default("MEMBER") // OWNER, ADMIN, RECEPTIONIST, MEMBER
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+}
+
+model BusinessProfile {
+  id                       String   @id @default(cuid())
+  tenantId                 String   @unique
+  industry                 String   @default("dental") // dental, medical, salon, etc.
+  legalName                String?
+  address                  String?
+  city                     String?
+  state                    String?
+  postalCode               String?
+  phone                    String?
+  website                  String?
+  emergencyContactProtocol String?
+  description              String?
+  onboardingCompleted      Boolean  @default(false)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  tenant                   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model Service {
+  id                         String               @id @default(cuid())
+  tenantId                   String
+  name                       String
+  description                String?
+  durationMinutes            Int                  @default(30)
+  bufferMinutes              Int                  @default(10)
+  price                      Float                @default(0)
+  displayPrice               Boolean              @default(true)
+  requiresDeposit            Boolean              @default(false)
+  depositAmount              Float                @default(0)
+  isNewPatientEligible       Boolean              @default(true)
+  isReturningPatientEligible Boolean              @default(true)
+  isActive                   Boolean              @default(true)
+  category                   String               @default("general")
+  createdAt                  DateTime             @default(now())
+  updatedAt                  DateTime             @updatedAt
+
+  tenant                     Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  staffAssignments           StaffMemberService[]
+  appointments               Appointment[]
+}
+
+model StaffMember {
+  id               String               @id @default(cuid())
+  tenantId         String
+  name             String
+  email            String?
+  phone            String?
+  title            String? // e.g. "Dr. Sarah Lin, DDS", "Dental Hygienist"
+  isActive         Boolean              @default(true)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  tenant           Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assignedServices StaffMemberService[]
+  appointments     Appointment[]
+}
+
+model StaffMemberService {
+  id            String      @id @default(cuid())
+  staffMemberId String
+  serviceId     String
+
+  staffMember   StaffMember @relation(fields: [staffMemberId], references: [id], onDelete: Cascade)
+  service       Service     @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([staffMemberId, serviceId])
+}
+
+model BusinessHour {
+  id        String   @id @default(cuid())
+  tenantId  String
+  dayOfWeek Int      // 0 = Sunday, 1 = Monday, ... 6 = Saturday
+  openTime  String   // e.g. "08:00"
+  closeTime String   // e.g. "17:00"
+  isClosed  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, dayOfWeek])
+}
+
+model BookingPolicy {
+  id                        String   @id @default(cuid())
+  tenantId                  String   @unique
+  minNoticeHours            Int      @default(2)
+  maxAdvanceDays            Int      @default(60)
+  cancellationNoticeHours   Int      @default(24)
+  bufferBetweenSlotsMinutes Int      @default(10)
+  requirePhone              Boolean  @default(true)
+  requireEmail              Boolean  @default(true)
+  requireReason             Boolean  @default(true)
+  depositRequired           Boolean  @default(false)
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  tenant                    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model Customer {
+  id                 String         @id @default(cuid())
+  tenantId           String
+  name               String
+  email              String
+  phone              String?
+  notes              String?
+  isExistingPatient  Boolean        @default(false)
+  totalAppointments  Int            @default(0)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  tenant             Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointments       Appointment[]
+  conversations      Conversation[]
+
+  @@unique([tenantId, email])
+}
+
+model Appointment {
+  id                      String            @id @default(cuid())
+  tenantId                String
+  customerId              String
+  serviceId               String
+  staffMemberId           String?
+  startTime               DateTime
+  endTime                 DateTime
+  status                  String            @default("CONFIRMED") // CONFIRMED, PENDING, CANCELLED, COMPLETED, NO_SHOW
+  notes                   String?
+  cancellationReason      String?
+  bookedVia               String            @default("AI_WIDGET") // AI_WIDGET, AI_PHONE, DASHBOARD, MANUAL
+  externalCalendarEventId String?
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+
+  tenant                  Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer                Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  service                 Service           @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  staffMember             StaffMember?      @relation(fields: [staffMemberId], references: [id], onDelete: SetNull)
+  notificationJobs        NotificationJob[]
+}
+
+model AgentConfiguration {
+  id                         String   @id @default(cuid())
+  tenantId                   String   @unique
+  agentName                  String   @default("Sarah")
+  tone                       String   @default("PROFESSIONAL") // FRIENDLY, PROFESSIONAL, FORMAL
+  greetingMessage            String   @default("Hello! Welcome to our clinic. I'm Sarah, your virtual assistant. How can I help you today?")
+  customInstructions         String?
+  emergencyEscalationNumber  String?
+  humanHandoffEmail          String?
+  allowPriceQuoting          Boolean  @default(true)
+  isEnabled                  Boolean  @default(true)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  tenant                     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model KnowledgeDocument {
+  id        String   @id @default(cuid())
+  tenantId  String
+  title     String
+  category  String   @default("FAQ") // FAQ, INSURANCE, LOCATION, POLICY
+  content   String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model Conversation {
+  id                String       @id @default(cuid())
+  tenantId          String
+  customerId        String?
+  channel           String       @default("WEB_WIDGET") // WEB_WIDGET, DASHBOARD_SANDBOX, PHONE
+  status            String       @default("ACTIVE") // ACTIVE, RESOLVED, ESCALATED
+  summary           String?
+  escalationReason  String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  tenant            Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer          Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  messages          Message[]
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  role           String       // USER, ASSISTANT, SYSTEM, TOOL
+  content        String
+  toolCalls      String?      // JSON string of function calls made by LLM
+  toolResult     String?      // JSON string of tool execution result
+  createdAt      DateTime     @default(now())
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}
+
+model CalendarIntegration {
+  id           String    @id @default(cuid())
+  tenantId     String
+  provider     String    @default("INTERNAL") // INTERNAL, GOOGLE, OUTLOOK
+  isEnabled    Boolean   @default(true)
+  calendarId   String?
+  syncToken    String?
+  lastSyncedAt DateTime?
+  status       String    @default("CONNECTED") // CONNECTED, DISCONNECTED, ERROR
+  errorMessage String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model SubscriptionPlan {
+  id                String         @id @default(cuid())
+  code              String         @unique // starter, growth, pro
+  name              String
+  description       String
+  monthlyPrice      Float
+  conversationLimit Int
+  staffLimit        Int
+  features          String         // JSON array of strings
+  isActive          Boolean        @default(true)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  subscriptions     Subscription[]
+}
+
+model Subscription {
+  id                   String           @id @default(cuid())
+  tenantId             String           @unique
+  planId               String
+  status               String           @default("TRIALING") // TRIALING, ACTIVE, PAST_DUE, CANCELED
+  currentPeriodStart   DateTime         @default(now())
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean          @default(false)
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  tenant               Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan                 SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+}
+
+model UsageRecord {
+  id                String   @id @default(cuid())
+  tenantId          String
+  period            String   // "YYYY-MM"
+  conversationCount Int      @default(0)
+  appointmentCount  Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, period])
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  tenantId     String?
+  userId       String?
+  action       String
+  resourceType String
+  resourceId   String?
+  ipAddress    String?
+  details      String?  // JSON string
+  createdAt    DateTime @default(now())
+
+  tenant       Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model NotificationJob {
+  id            String       @id @default(cuid())
+  tenantId      String
+  appointmentId String?
+  type          String       // EMAIL_CONFIRMATION, EMAIL_REMINDER, SMS_REMINDER
+  recipient     String
+  status        String       @default("PENDING") // PENDING, SENT, FAILED
+  scheduledFor  DateTime     @default(now())
+  sentAt        DateTime?
+  payload       String?      // JSON string
+  error         String?
+  createdAt     DateTime     @default(now())
+
+  tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+}

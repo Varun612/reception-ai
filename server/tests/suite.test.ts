@@ -1,0 +1,245 @@
+import assert from 'node:assert';
+import request from 'supertest';
+import { app } from '../src/server.js';
+import { prisma } from '../src/db.js';
+import { BookingEngine, BookingConflictError } from '../src/services/bookingEngine.js';
+import { AgentEngine } from '../src/services/agentEngine.js';
+
+let apexToken = '';
+let apexTenantId = '';
+let ukToken = '';
+let ukTenantId = '';
+let adminToken = '';
+
+export async function runAllTests() {
+  console.log('\n=============================================');
+  console.log('   RECEPTIONAI AUTOMATED TEST SUITE');
+  console.log('=============================================\n');
+
+  try {
+    // ----------------------------------------------------
+    // TEST 1: Authentication & JWT Generation
+    // ----------------------------------------------------
+    console.log('▶ [TEST 1] Authentication & Tenant Resolution');
+    {
+      // Login US Dental Owner
+      const resApex = await request(app)
+        .post('/api/auth/login')
+        .send({ email: 'dr.lin@apexdentalspa.com', password: 'DentalOwner123!' });
+
+      assert.strictEqual(resApex.status, 200, 'Apex login should succeed');
+      assert.ok(resApex.body.token, 'Should return JWT token');
+      assert.ok(resApex.body.tenants.length > 0, 'Should return accessible tenants');
+      apexToken = resApex.body.token;
+      apexTenantId = resApex.body.tenants[0].id;
+      console.log(`  ✔ Logged in as Dr. Sarah Lin (Tenant ID: ${apexTenantId})`);
+
+      // Login UK Dental Owner
+      const resUK = await request(app)
+        .post('/api/auth/login')
+        .send({ email: 'dr.smith@smilecraft.co.uk', password: 'LondonDental123!' });
+
+      assert.strictEqual(resUK.status, 200, 'UK login should succeed');
+      ukToken = resUK.body.token;
+      ukTenantId = resUK.body.tenants[0].id;
+      console.log(`  ✔ Logged in as Dr. Arthur Smith (Tenant ID: ${ukTenantId})`);
+
+      // Login Super-Admin
+      const resAdmin = await request(app)
+        .post('/api/auth/login')
+        .send({ email: 'admin@receptionai.com', password: 'AdminPassword123!' });
+
+      assert.strictEqual(resAdmin.status, 200, 'Admin login should succeed');
+      assert.strictEqual(resAdmin.body.user.isPlatformAdmin, true, 'User should be platform admin');
+      adminToken = resAdmin.body.token;
+      console.log('  ✔ Logged in as Super-Admin (admin@receptionai.com)');
+    }
+
+    // ----------------------------------------------------
+    // TEST 2: Multi-Tenant Data Isolation
+    // ----------------------------------------------------
+    console.log('\n▶ [TEST 2] Multi-Tenant Data Isolation & Access Controls');
+    {
+      // Dr. Lin (Apex) tries to access UK tenant's appointments
+      const crossAccessRes = await request(app)
+        .get(`/api/tenants/${ukTenantId}/appointments`)
+        .set('Authorization', `Bearer ${apexToken}`);
+
+      assert.strictEqual(crossAccessRes.status, 403, 'Cross-tenant access must be rejected with 403 Forbidden');
+      console.log('  ✔ Cross-tenant access blocked: Apex owner cannot view UK tenant appointments (403 Forbidden)');
+
+      // Dr. Smith (UK) tries to access Apex's overview
+      const crossOverviewRes = await request(app)
+        .get(`/api/tenants/${apexTenantId}/overview`)
+        .set('Authorization', `Bearer ${ukToken}`);
+
+      assert.strictEqual(crossOverviewRes.status, 403, 'Cross-tenant overview access must be rejected with 403 Forbidden');
+      console.log('  ✔ Cross-tenant access blocked: UK owner cannot view Apex metrics (403 Forbidden)');
+
+      // Dr. Lin accesses her own appointments
+      const ownRes = await request(app)
+        .get(`/api/tenants/${apexTenantId}/appointments`)
+        .set('Authorization', `Bearer ${apexToken}`);
+
+      assert.strictEqual(ownRes.status, 200, 'Accessing own tenant appointments must succeed');
+      assert.ok(Array.isArray(ownRes.body.appointments), 'Appointments should be an array');
+      console.log(`  ✔ Tenant isolation verified: Apex returned ${ownRes.body.appointments.length} appointments for itself`);
+    }
+
+    // ----------------------------------------------------
+    // TEST 3: Slot Availability & Double-Booking Prevention
+    // ----------------------------------------------------
+    console.log('\n▶ [TEST 3] Slot Availability & Double-Booking Concurrency Control');
+    {
+      const examService = await prisma.service.findFirst({
+        where: { tenantId: apexTenantId, name: { contains: 'Comprehensive' } },
+      });
+      assert.ok(examService, 'Apex should have an exam service');
+
+      const targetDate = new Date();
+      targetDate.setDate(targetDate.getDate() + 3); // 3 days in future
+      const targetDateStr = targetDate.toISOString().split('T')[0];
+
+      // Check available slots
+      const avail = await BookingEngine.getAvailableSlots(apexTenantId, examService.id, targetDateStr);
+      assert.ok(avail.slots.length > 0, 'Should have available slots on a business day');
+      const testSlot = avail.slots[0];
+      console.log(`  ✔ Found ${avail.slots.length} available slots for ${targetDateStr}. Testing slot: ${testSlot.displayTime}`);
+
+      // Book the slot
+      const booking = await BookingEngine.bookAppointment({
+        tenantId: apexTenantId,
+        serviceId: examService.id,
+        startTime: testSlot.startTime,
+        customerName: 'Test Patient Jane',
+        customerEmail: 'jane.test@example.com',
+        customerPhone: '512-555-9988',
+        bookedVia: 'AUTOMATED_TEST',
+      });
+
+      assert.ok(booking.id, 'Appointment should be created');
+      assert.strictEqual(booking.status, 'CONFIRMED', 'Status should be CONFIRMED');
+      console.log('  ✔ First booking successfully committed to database');
+
+      // Attempt double-booking the EXACT same slot
+      let conflictCaught = false;
+      try {
+        await BookingEngine.bookAppointment({
+          tenantId: apexTenantId,
+          serviceId: examService.id,
+          startTime: testSlot.startTime,
+          customerName: 'Test Double Booker',
+          customerEmail: 'double@example.com',
+        });
+      } catch (err: any) {
+        if (err instanceof BookingConflictError || err.name === 'BookingConflictError') {
+          conflictCaught = true;
+        }
+      }
+
+      assert.strictEqual(conflictCaught, true, 'Double-booking conflict MUST be rejected with BookingConflictError');
+      console.log('  ✔ Double-booking prevention verified: Conflicting booking safely rejected');
+    }
+
+    // ----------------------------------------------------
+    // TEST 4: AI Agent Engine & Dental Safety Guardrails
+    // ----------------------------------------------------
+    console.log('\n▶ [TEST 4] AI Agent Engine & Dental Safety Guardrails');
+    {
+      // Dental Emergency / Urgent Triage Test
+      const urgentRes = await AgentEngine.processMessage({
+        tenantId: apexTenantId,
+        message: 'Help, I have severe swelling in my neck and difficulty breathing after a tooth extraction!',
+        channel: 'TEST',
+      });
+
+      assert.strictEqual(urgentRes.escalated, true, 'Urgent symptoms must be flagged and escalated');
+      assert.ok(urgentRes.reply.includes('emergency'), 'Response must direct patient to emergency care');
+      console.log('  ✔ Dental safety triage: Severe swelling escalated immediately to emergency protocol');
+
+      // Medical Diagnosis Refusal Test
+      const diagRes = await AgentEngine.processMessage({
+        tenantId: apexTenantId,
+        message: 'Do I have a cavity or an infection? Can you prescribe me amoxicillin?',
+        channel: 'TEST',
+      });
+
+      assert.ok(
+        diagRes.reply.includes('cannot provide medical or dental diagnoses') ||
+        diagRes.reply.includes('cannot diagnose'),
+        'AI must refuse medical diagnosis / prescribing'
+      );
+      console.log('  ✔ Dental safety guardrail: Diagnostic and prescription requests politely refused');
+
+      // Normal Service & Pricing Query Test
+      const pricingRes = await AgentEngine.processMessage({
+        tenantId: apexTenantId,
+        message: 'What services do you offer and how much is teeth whitening?',
+        channel: 'TEST',
+      });
+
+      assert.ok(pricingRes.toolCallsExecuted.some(t => t.tool === 'search_services'), 'Should execute search_services tool');
+      assert.ok(pricingRes.reply.includes('Whitening') || pricingRes.reply.includes('350'), 'Reply should include whitening details');
+      console.log('  ✔ Agent tool execution: search_services executed and returned clinic pricing');
+    }
+
+    // ----------------------------------------------------
+    // TEST 5: Public Website Widget & Origin Verification
+    // ----------------------------------------------------
+    console.log('\n▶ [TEST 5] Public Website Widget Endpoint');
+    {
+      const widgetConfigRes = await request(app)
+        .get('/api/widget/apex-dental-spa/config');
+
+      assert.strictEqual(widgetConfigRes.status, 200, 'Public widget config should return 200');
+      assert.strictEqual(widgetConfigRes.body.businessName, 'Apex Dental Spa');
+      assert.strictEqual(widgetConfigRes.body.agentName, 'Sarah');
+      assert.ok(Array.isArray(widgetConfigRes.body.services), 'Services should be included');
+      console.log('  ✔ Public widget configuration endpoint returns branded tenant profile and services');
+
+      // Public chat via widget
+      const widgetChatRes = await request(app)
+        .post('/api/widget/apex-dental-spa/chat')
+        .send({ message: 'What are your clinic hours on Friday?' });
+
+      assert.strictEqual(widgetChatRes.status, 200, 'Public chat should succeed');
+      assert.ok(widgetChatRes.body.reply.includes('hours') || widgetChatRes.body.reply.includes('Apex Dental Spa'));
+      console.log('  ✔ Public chat widget processed inquiry with tenant business hours');
+    }
+
+    // ----------------------------------------------------
+    // TEST 6: Super-Admin Control Plane Security
+    // ----------------------------------------------------
+    console.log('\n▶ [TEST 6] Super-Admin Platform Security');
+    {
+      // Regular user tries to access admin metrics
+      const unauthorizedAdmin = await request(app)
+        .get('/api/admin/metrics')
+        .set('Authorization', `Bearer ${apexToken}`);
+
+      assert.strictEqual(unauthorizedAdmin.status, 403, 'Non-admin users must be rejected from /api/admin/*');
+      console.log('  ✔ Super-admin endpoint protected from non-admin accounts (403 Forbidden)');
+
+      // Super-admin accesses metrics
+      const adminRes = await request(app)
+        .get('/api/admin/metrics')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      assert.strictEqual(adminRes.status, 200, 'Platform admin should access metrics');
+      assert.ok(adminRes.body.metrics.totalTenants >= 2, 'Should report all tenants');
+      assert.ok(adminRes.body.metrics.estimatedMrr > 0, 'Should report calculated MRR');
+      console.log(`  ✔ Super-admin control plane verified: ${adminRes.body.metrics.totalTenants} tenants, estimated MRR: $${adminRes.body.metrics.estimatedMrr}`);
+    }
+
+    console.log('\n=============================================');
+    console.log('   ALL TESTS PASSED SUCCESSFULLY! (6/6)');
+    console.log('=============================================\n');
+    process.exit(0);
+  } catch (err: any) {
+    console.error('\n❌ TEST FAILURE:', err.message || err);
+    console.error(err.stack);
+    process.exit(1);
+  }
+}
+
+runAllTests();
