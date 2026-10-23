@@ -34,6 +34,7 @@ model Tenant {
   usageRecords         UsageRecord[]
   auditLogs            AuditLog[]
   notificationJobs     NotificationJob[]
+  callLogs             CallLog[]
 }
 
 model User {
@@ -213,11 +214,16 @@ model AgentConfiguration {
   tenantId                   String   @unique
   agentName                  String   @default("Sarah")
   tone                       String   @default("PROFESSIONAL") // FRIENDLY, PROFESSIONAL, FORMAL
+  voiceId                    String   @default("sarah-warm") // sarah-warm, james-uk, olivia-health, michael-aus
   greetingMessage            String   @default("Hello! Welcome to our clinic. I'm Sarah, your virtual assistant. How can I help you today?")
+  customAudioGreetingUrl     String?  // Base64 data URL or audio file path
   customInstructions         String?
   emergencyEscalationNumber  String?
   humanHandoffEmail          String?
+  forwardingPhoneNumber      String?  // Phone number to forward live calls
   allowPriceQuoting          Boolean  @default(true)
+  phoneReceptionistEnabled   Boolean  @default(true)
+  callToChatEnabled          Boolean  @default(true)
   isEnabled                  Boolean  @default(true)
   createdAt                  DateTime @default(now())
   updatedAt                  DateTime @updatedAt
@@ -359,4 +365,20 @@ model NotificationJob {
 
   tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   appointment   Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+}
+
+model CallLog {
+  id               String       @id @default(cuid())
+  tenantId         String
+  callerPhone      String
+  callerName       String?
+  status           String       @default("COMPLETED") // COMPLETED, BOOKED, TRANSFERRED, MISSED
+  durationSeconds  Int          @default(0)
+  transcript       String       // JSON string of conversation turns
+  audioRecordingUrl String?
+  smsChatLinkSent  Boolean      @default(false)
+  appointmentId    String?
+  createdAt        DateTime     @default(now())
+
+  tenant           Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }

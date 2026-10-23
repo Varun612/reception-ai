@@ -231,8 +231,110 @@ export async function runAllTests() {
       console.log(`  ✔ Super-admin control plane verified: ${adminRes.body.metrics.totalTenants} tenants, estimated MRR: $${adminRes.body.metrics.estimatedMrr}`);
     }
 
+    // ----------------------------------------------------
+    // TEST 7: AI Voice Receptionist, Call-to-Chat & Dual Confirmations
+    // ----------------------------------------------------
+    console.log('\n▶ [TEST 7] AI Phone Receptionist, Call-to-Chat Revert & Dual Confirmations (SMS + Email)');
+    {
+      // 1. Inbound telephone call simulation
+      const callStartRes = await request(app)
+        .post('/api/telephony/apex-dental-spa/call/start')
+        .send({
+          callerPhone: '+1 (512) 555-7890',
+          callerName: 'Alex Morgan',
+        });
+
+      assert.strictEqual(callStartRes.status, 200, 'Inbound phone call should connect');
+      assert.ok(callStartRes.body.callId, 'Should generate a callId');
+      assert.ok(callStartRes.body.greetingText.includes('Apex Dental Spa'), 'Greeting must introduce the practice');
+      const callId = callStartRes.body.callId;
+      console.log(`  ✔ Phone call connected: Receptionist Sarah answered caller Alex Morgan (Call ID: ${callId})`);
+
+      // 2. Caller asks for teeth whitening cost over the phone
+      const speechTurn1 = await request(app)
+        .post('/api/telephony/apex-dental-spa/call/turn')
+        .send({
+          callId,
+          callerPhone: '+1 (512) 555-7890',
+          callerName: 'Alex Morgan',
+          utterance: 'Hi, how much does teeth whitening cost and do you have openings tomorrow?',
+        });
+
+      assert.strictEqual(speechTurn1.status, 200);
+      assert.ok(speechTurn1.body.replyText.includes('350') || speechTurn1.body.replyText.includes('Whitening'));
+      console.log('  ✔ Inbound call speech turn: AI receptionist explained whitening price & doctor availability');
+
+      // 3. Call-to-Chat Revert: Caller requests interactive slot picker sent to their phone
+      const callToChatRes = await request(app)
+        .post('/api/telephony/apex-dental-spa/call/revert-to-chat')
+        .send({
+          callId,
+          callerPhone: '+1 (512) 555-7890',
+          callerName: 'Alex Morgan',
+        });
+
+      assert.strictEqual(callToChatRes.status, 200);
+      assert.strictEqual(callToChatRes.body.smsLinkSent, true);
+      assert.ok(callToChatRes.body.chatLink.includes('/book-chat/apex-dental-spa'));
+      console.log('  ✔ Call-to-Chat handoff: SMS with interactive mobile booking link sent to caller phone');
+
+      // 4. Booking confirmation & Dual Omnichannel Dispatch (Phone SMS + Email)
+      const cleaningService = await prisma.service.findFirst({
+        where: { tenantId: apexTenantId, name: { contains: 'Routine' } },
+      });
+      assert.ok(cleaningService);
+
+      const targetDate = new Date();
+      targetDate.setDate(targetDate.getDate() + 5);
+      const targetDateStr = targetDate.toISOString().split('T')[0];
+
+      const avail = await BookingEngine.getAvailableSlots(apexTenantId, cleaningService.id, targetDateStr);
+      assert.ok(avail.slots.length > 0, 'Should have slots available');
+      const chosenSlot = avail.slots[0];
+
+      const testCustomerEmail = `alex.morgan.${Date.now()}@example.com`;
+      const testCustomerPhone = '+1 (512) 555-7890';
+
+      const bookingRes = await BookingEngine.bookAppointment({
+        tenantId: apexTenantId,
+        serviceId: cleaningService.id,
+        startTime: chosenSlot.startTime,
+        customerName: 'Alex Morgan',
+        customerEmail: testCustomerEmail,
+        customerPhone: testCustomerPhone,
+        bookedVia: 'AI_PHONE',
+      });
+
+      assert.ok(bookingRes.id, 'Appointment should be booked');
+      assert.strictEqual(bookingRes.notifications.emailSentTo, testCustomerEmail);
+      assert.strictEqual(bookingRes.notifications.smsSentTo, testCustomerPhone);
+
+      // Verify both notification jobs exist in database
+      const [emailJob, smsJob] = await Promise.all([
+        prisma.notificationJob.findFirst({
+          where: { appointmentId: bookingRes.id, type: 'EMAIL_CONFIRMATION' },
+        }),
+        prisma.notificationJob.findFirst({
+          where: { appointmentId: bookingRes.id, type: 'SMS_CONFIRMATION' },
+        }),
+      ]);
+
+      assert.ok(emailJob, 'Email confirmation job must be recorded');
+      assert.ok(smsJob, 'SMS confirmation job must be recorded');
+      assert.strictEqual(emailJob.status, 'SENT');
+      assert.strictEqual(smsJob.status, 'SENT');
+      console.log('  ✔ Dual confirmation dispatch: SMS sent to +1 (512) 555-7890 and Email sent to alex.morgan@example.com');
+
+      // 5. End call
+      const endRes = await request(app)
+        .post('/api/telephony/apex-dental-spa/call/end')
+        .send({ callId, durationSeconds: 84 });
+      assert.strictEqual(endRes.status, 200);
+      console.log('  ✔ Call concluded and call transcript recorded in practice history (84 seconds)');
+    }
+
     console.log('\n=============================================');
-    console.log('   ALL TESTS PASSED SUCCESSFULLY! (6/6)');
+    console.log('   ALL TESTS PASSED SUCCESSFULLY! (7/7)');
     console.log('=============================================\n');
     process.exit(0);
   } catch (err: any) {

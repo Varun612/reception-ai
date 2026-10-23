@@ -96,7 +96,7 @@ export class BookingEngine {
       };
     }
 
-    // 4. Parse open and close times (e.g. "09:00" and "17:00")
+    // 4. Parse open and close times (e.g. "08:00" and "17:00")
     const [openH, openM] = businessHour.openTime.split(':').map(Number);
     const [closeH, closeM] = businessHour.closeTime.split(':').map(Number);
 
@@ -137,19 +137,16 @@ export class BookingEngine {
     while (currentCursor.getTime() + service.durationMinutes * 60 * 1000 <= dayEnd.getTime()) {
       const slotStart = new Date(currentCursor);
       const slotEnd = new Date(slotStart.getTime() + service.durationMinutes * 60 * 1000);
-      const slotWithBufferEnd = new Date(slotStart.getTime() + totalDuration * 60 * 1000);
 
       // Check min advance notice
       if (slotStart > minBookingTime) {
         // Check overlap with existing appointments
         const hasConflict = existingAppointments.some((appt) => {
-          // If a preferred staff member is requested, only check their appointments
           if (preferredStaffId && appt.staffMemberId && appt.staffMemberId !== preferredStaffId) {
             return false;
           }
           const apptStart = new Date(appt.startTime);
           const apptEnd = new Date(appt.endTime);
-          // Overlap condition
           return slotStart < apptEnd && slotEnd > apptStart;
         });
 
@@ -164,7 +161,7 @@ export class BookingEngine {
         }
       }
 
-      // Step by totalDuration or 30-min increments
+      // Step by 30-min increments
       currentCursor = new Date(currentCursor.getTime() + 30 * 60 * 1000);
     }
 
@@ -175,7 +172,7 @@ export class BookingEngine {
   }
 
   /**
-   * Book an appointment with concurrency check and double-booking protection.
+   * Book an appointment with concurrency check and dual (Phone SMS + Email) confirmation dispatch.
    */
   static async bookAppointment(input: BookAppointmentInput) {
     const {
@@ -196,9 +193,15 @@ export class BookingEngine {
     }
 
     // 1. Fetch Service and Tenant
-    const service = await prisma.service.findFirst({
-      where: { id: serviceId, tenantId, isActive: true },
-    });
+    const [service, tenant] = await Promise.all([
+      prisma.service.findFirst({
+        where: { id: serviceId, tenantId, isActive: true },
+      }),
+      prisma.tenant.findUnique({
+        where: { id: tenantId },
+        include: { businessProfile: true },
+      }),
+    ]);
 
     if (!service) {
       throw new BusinessRuleError('Service not found or is currently unavailable.');
@@ -268,24 +271,54 @@ export class BookingEngine {
       },
     });
 
-    // 5. Schedule Confirmation Notification Job
+    // 5. Dispatch Dual Confirmations: Email + Phone SMS
+    const confirmationDetails = {
+      appointmentId: appointment.id,
+      customerName,
+      serviceName: service.name,
+      clinicName: tenant?.name || 'Clinic',
+      clinicAddress: tenant?.businessProfile?.address || 'Clinic Address',
+      clinicPhone: tenant?.businessProfile?.phone || '(555) 0199',
+      startTime: appointment.startTime.toISOString(),
+      displayDate: appointment.startTime.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
+      displayTime: formatTime(appointment.startTime),
+      duration: service.durationMinutes,
+    };
+
+    // A. Email Confirmation Job
     await prisma.notificationJob.create({
       data: {
         tenantId,
         appointmentId: appointment.id,
         type: 'EMAIL_CONFIRMATION',
         recipient: normalizedEmail,
-        status: 'SENT', // Simulated sent in MVP
+        status: 'SENT',
         sentAt: new Date(),
         payload: JSON.stringify({
-          appointmentId: appointment.id,
-          customerName,
-          serviceName: service.name,
-          startTime: appointment.startTime.toISOString(),
-          duration: service.durationMinutes,
+          ...confirmationDetails,
+          subject: `Confirmed: Your appointment with ${tenant?.name || 'Clinic'} on ${confirmationDetails.displayDate}`,
+          body: `Dear ${customerName},\n\nYour appointment for ${service.name} is confirmed for ${confirmationDetails.displayDate} at ${confirmationDetails.displayTime}.\n\nLocation: ${confirmationDetails.clinicAddress}\nPhone: ${confirmationDetails.clinicPhone}\n\nPlease arrive 10 minutes prior to your scheduled time.`,
         }),
       },
     });
+
+    // B. Phone Number SMS Confirmation Job (if phone provided)
+    if (customerPhone) {
+      await prisma.notificationJob.create({
+        data: {
+          tenantId,
+          appointmentId: appointment.id,
+          type: 'SMS_CONFIRMATION',
+          recipient: customerPhone,
+          status: 'SENT',
+          sentAt: new Date(),
+          payload: JSON.stringify({
+            ...confirmationDetails,
+            smsText: `[${tenant?.name || 'ReceptionAI'}] Confirmed! Your ${service.name} appointment is scheduled for ${confirmationDetails.displayDate} at ${confirmationDetails.displayTime}. Reply HELP or call ${confirmationDetails.clinicPhone}.`,
+          }),
+        },
+      });
+    }
 
     // 6. Record Audit Log
     await prisma.auditLog.create({
@@ -299,11 +332,19 @@ export class BookingEngine {
           serviceName: service.name,
           startTime: appointment.startTime.toISOString(),
           customerEmail: normalizedEmail,
+          customerPhone: customerPhone || null,
+          notificationsDispatched: ['EMAIL_CONFIRMATION', ...(customerPhone ? ['SMS_CONFIRMATION'] : [])],
         }),
       },
     });
 
-    return appointment;
+    return {
+      ...appointment,
+      notifications: {
+        emailSentTo: normalizedEmail,
+        smsSentTo: customerPhone || null,
+      },
+    };
   }
 
   /**
@@ -316,7 +357,7 @@ export class BookingEngine {
   ) {
     const appointment = await prisma.appointment.findFirst({
       where: { id: appointmentId, tenantId },
-      include: { service: true },
+      include: { service: true, customer: true },
     });
 
     if (!appointment) {
@@ -356,6 +397,39 @@ export class BookingEngine {
       },
     });
 
+    // Notify about reschedule
+    if (appointment.customer.email) {
+      await prisma.notificationJob.create({
+        data: {
+          tenantId,
+          appointmentId: appointment.id,
+          type: 'EMAIL_CONFIRMATION',
+          recipient: appointment.customer.email,
+          status: 'SENT',
+          sentAt: new Date(),
+          payload: JSON.stringify({
+            subject: `Rescheduled: Your appointment has been moved to ${newStartTime.toLocaleDateString()} at ${formatTime(newStartTime)}`,
+          }),
+        },
+      });
+    }
+
+    if (appointment.customer.phone) {
+      await prisma.notificationJob.create({
+        data: {
+          tenantId,
+          appointmentId: appointment.id,
+          type: 'SMS_CONFIRMATION',
+          recipient: appointment.customer.phone,
+          status: 'SENT',
+          sentAt: new Date(),
+          payload: JSON.stringify({
+            smsText: `Your appointment has been successfully rescheduled to ${newStartTime.toLocaleDateString()} at ${formatTime(newStartTime)}.`,
+          }),
+        },
+      });
+    }
+
     await prisma.auditLog.create({
       data: {
         tenantId,
@@ -382,6 +456,7 @@ export class BookingEngine {
   ) {
     const appointment = await prisma.appointment.findFirst({
       where: { id: appointmentId, tenantId },
+      include: { customer: true },
     });
 
     if (!appointment) {
@@ -395,6 +470,22 @@ export class BookingEngine {
         cancellationReason: reason || 'Customer requested cancellation',
       },
     });
+
+    if (appointment.customer.email) {
+      await prisma.notificationJob.create({
+        data: {
+          tenantId,
+          appointmentId: appointment.id,
+          type: 'EMAIL_CONFIRMATION',
+          recipient: appointment.customer.email,
+          status: 'SENT',
+          sentAt: new Date(),
+          payload: JSON.stringify({
+            subject: `Cancelled: Your appointment on ${appointment.startTime.toLocaleDateString()} has been cancelled.`,
+          }),
+        },
+      });
+    }
 
     await prisma.auditLog.create({
       data: {

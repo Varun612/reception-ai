@@ -12,6 +12,7 @@ import agentRouter from './routes/agent.js';
 import widgetRouter from './routes/widget.js';
 import billingRouter from './routes/billing.js';
 import adminRouter from './routes/admin.js';
+import telephonyRouter from './routes/telephony.js';
 
 export const app = express();
 
@@ -115,6 +116,8 @@ app.use('/api/tenants', billingRouter);
 app.use('/api/billing', billingRouter);
 app.use('/api/widget', widgetRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/telephony', telephonyRouter);
+app.use('/api/tenants', telephonyRouter);
 
 // Health check
 app.get('/api/health', (req, res) => {

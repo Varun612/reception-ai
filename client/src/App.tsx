@@ -28,6 +28,7 @@ import { DashboardLayout } from './components/DashboardLayout.js';
 import { OverviewPage } from './pages/dashboard/OverviewPage.js';
 import { AppointmentsPage } from './pages/dashboard/AppointmentsPage.js';
 import { AgentSettingsPage } from './pages/dashboard/AgentSettingsPage.js';
+import { PhoneReceptionistPage } from './pages/dashboard/PhoneReceptionistPage.js';
 import { ServicesStaffPage } from './pages/dashboard/ServicesStaffPage.js';
 import { BusinessSettingsPage } from './pages/dashboard/BusinessSettingsPage.js';
 import { WidgetManagerPage } from './pages/dashboard/WidgetManagerPage.js';
@@ -43,6 +44,7 @@ import { AdminLogsPage } from './pages/admin/AdminLogsPage.js';
 
 // Standalone Embed View
 import { EmbedWidgetPage } from './pages/embed/EmbedWidgetPage.js';
+import { BookChatPage } from './pages/embed/BookChatPage.js';
 
 // Protected Route Guard
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -81,6 +83,7 @@ export const App: React.FC = () => {
     <Routes>
       {/* Standalone Embeddable Widget (no navbar/footer) */}
       <Route path="/embed/:tenantSlug" element={<EmbedWidgetPage />} />
+      <Route path="/book-chat/:tenantSlug" element={<BookChatPage />} />
 
       {/* Auth Pages */}
       <Route path="/login" element={<LoginPage />} />
@@ -108,6 +111,7 @@ export const App: React.FC = () => {
         <Route index element={<OverviewPage />} />
         <Route path="appointments" element={<AppointmentsPage />} />
         <Route path="agent" element={<AgentSettingsPage />} />
+        <Route path="phone" element={<PhoneReceptionistPage />} />
         <Route path="services" element={<ServicesStaffPage />} />
         <Route path="settings" element={<BusinessSettingsPage />} />
         <Route path="widget" element={<WidgetManagerPage />} />
