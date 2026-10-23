@@ -1,32 +1,26 @@
 services:
-  # Backend API Service
+  # Backend API Web Service
   - type: web
     name: reception-ai-backend
-    env: node
+    runtime: node
     plan: free
     rootDir: server
-    buildCommand: npm install && npx prisma db push && npm run build
+    buildCommand: npm install && npx prisma db push && npm run db:seed
     startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 10000
-      - key: CLIENT_URL
-        fromService:
-          type: web
-          name: reception-ai-frontend
-          property: host
       - key: DATABASE_URL
         value: file:./dev.db
       - key: JWT_SECRET
         generateValue: true
 
-  # Frontend Web Client
+  # Frontend Web Client (Static Site on CDN - No plan field)
   - type: web
     name: reception-ai-frontend
-    env: static
-    plan: free
+    runtime: static
     rootDir: client
     buildCommand: npm install && npm run build
     staticPublishPath: dist
