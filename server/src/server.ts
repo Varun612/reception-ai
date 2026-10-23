@@ -139,7 +139,9 @@ app.get('/api/health', (req, res) => {
 // Error handling middleware
 app.use(errorHandler);
 
-if (process.env.NODE_ENV !== 'test') {
+const isRunningTest = process.env.NODE_ENV === 'test' || process.argv.some(arg => arg.includes('test') || arg.includes('runner'));
+
+if (!isRunningTest) {
   app.listen(config.port, () => {
     console.log(`[ReceptionAI Server] Listening on port ${config.port} in ${config.nodeEnv} mode`);
     console.log(`[ReceptionAI Server] Database URL: ${process.env.DATABASE_URL}`);

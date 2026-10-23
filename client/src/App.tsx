@@ -12,6 +12,7 @@ import { FeaturesPage } from './pages/public/FeaturesPage.js';
 import { IndustriesPage } from './pages/public/IndustriesPage.js';
 import { PricingPage } from './pages/public/PricingPage.js';
 import { DemoPage } from './pages/public/DemoPage.js';
+import { AboutPage } from './pages/public/AboutPage.js';
 import { DocsPage } from './pages/public/DocsPage.js';
 import { TermsPage } from './pages/public/TermsPage.js';
 import { PrivacyPage } from './pages/public/PrivacyPage.js';
@@ -149,6 +150,7 @@ export const App: React.FC = () => {
                 <Route path="/industries" element={<IndustriesPage />} />
                 <Route path="/pricing" element={<PricingPage />} />
                 <Route path="/demo" element={<DemoPage />} />
+                <Route path="/about" element={<AboutPage />} />
                 <Route path="/docs" element={<DocsPage />} />
                 <Route path="/terms" element={<TermsPage />} />
                 <Route path="/privacy" element={<PrivacyPage />} />

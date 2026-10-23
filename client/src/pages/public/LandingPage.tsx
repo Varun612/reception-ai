@@ -287,6 +287,116 @@ export const LandingPage: React.FC = () => {
         </div>
       </section>
 
+      {/* 2.5 ABOUT & LIVE SERVICES DIRECTORY */}
+      <section className="py-16 bg-slate-900 text-white border-y border-slate-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div>
+              <div className="inline-flex items-center gap-1.5 text-xs font-bold text-purple-400 uppercase tracking-widest mb-2">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>About the Service • Live Architecture</span>
+              </div>
+              <h3 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+                Explore the Live Services Created
+              </h3>
+              <p className="text-slate-400 text-sm mt-2 max-w-2xl">
+                ReceptionAI provides a unified omnichannel ecosystem spanning telephone voice agents, mobile slot pickers, zero-hallucination calendar reservations, and patient telemetry.
+              </p>
+            </div>
+
+            <Link
+              to="/about"
+              className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs flex items-center gap-1.5 transition-colors self-start shadow-md shadow-purple-600/20"
+            >
+              <span>View Full About Page</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Card 1: Call-to-Chat Slot Picker */}
+            <div className="bg-slate-950/80 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between space-y-4 hover:border-purple-500/50 transition-colors">
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded-full inline-block">
+                  Live Patient URL
+                </span>
+                <h4 className="font-bold text-base text-white">Call-to-Chat Slot Picker</h4>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Interactive mobile booking link sent to callers via SMS. Visual chair picker with multi-click protection.
+                </p>
+              </div>
+              <Link
+                to="/book-chat/apex-dental-spa"
+                className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-purple-700 text-white font-bold text-xs flex items-center justify-between transition-colors"
+              >
+                <span>/book-chat/apex-dental-spa</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+
+            {/* Card 2: Voice Studio */}
+            <div className="bg-slate-950/80 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between space-y-4 hover:border-purple-500/50 transition-colors">
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider bg-purple-950/60 border border-purple-800/60 px-2 py-0.5 rounded-full inline-block">
+                  Voice Studio
+                </span>
+                <h4 className="font-bold text-base text-white">Phone Receptionist Studio</h4>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Natural AI voice personas and in-browser microphone audio recording for practice owners.
+                </p>
+              </div>
+              <Link
+                to="/dashboard/phone"
+                className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-purple-700 text-white font-bold text-xs flex items-center justify-between transition-colors"
+              >
+                <span>/dashboard/phone</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+
+            {/* Card 3: Patient Telemetry */}
+            <div className="bg-slate-950/80 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between space-y-4 hover:border-purple-500/50 transition-colors">
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold text-blue-400 uppercase tracking-wider bg-blue-950/60 border border-blue-800/60 px-2 py-0.5 rounded-full inline-block">
+                  Metadata & Study
+                </span>
+                <h4 className="font-bold text-base text-white">Patient Telemetry & Journey</h4>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Conversion funnels, device breakdown, and live tracking of duplicate clicks saved.
+                </p>
+              </div>
+              <Link
+                to="/dashboard/telemetry"
+                className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-purple-700 text-white font-bold text-xs flex items-center justify-between transition-colors"
+              >
+                <span>/dashboard/telemetry</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+
+            {/* Card 4: Embed Widget */}
+            <div className="bg-slate-950/80 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between space-y-4 hover:border-purple-500/50 transition-colors">
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider bg-indigo-950/60 border border-indigo-800/60 px-2 py-0.5 rounded-full inline-block">
+                  Embeddable Snippet
+                </span>
+                <h4 className="font-bold text-base text-white">Live Website Chat Widget</h4>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Turnkey iframe view of the 24/7 autonomous receptionist deployed for Apex Dental Spa.
+                </p>
+              </div>
+              <Link
+                to="/embed/apex-dental-spa"
+                className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-purple-700 text-white font-bold text-xs flex items-center justify-between transition-colors"
+              >
+                <span>/embed/apex-dental-spa</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* 3. DENTAL CLINIC SPECIALIZATION SPOTLIGHT */}
       <section className="py-20 bg-slate-50 border-y border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
