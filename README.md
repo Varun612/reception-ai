@@ -4,7 +4,7 @@
 [![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev/)
 [![Prisma](https://img.shields.io/badge/Prisma-6.4-2D3748.svg)](https://www.prisma.io/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-38B2AC.svg)](https://tailwindcss.com/)
-[![Tests](https://img.shields.io/badge/Tests-Passing%20(6%2F6)-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-Passing%20(7%2F7)-brightgreen.svg)]()
 
 > **"Your AI Receptionist. Always Ready."**  
 > Answer more inquiries, book more appointments, and give every patient a better first impression.
@@ -16,6 +16,9 @@
 **ReceptionAI** is a multi-tenant, subscription-based B2B SaaS platform that enables appointment-based businesses—starting with dental clinics in the US, UK, Canada, and Australia—to deploy autonomous, 24/7 AI receptionists that handle patient inquiries and book appointments directly into their calendar.
 
 ### Key Differentiators:
+- **AI Phone Receptionist & Voice Studio:** An intelligent voice agent that answers inbound telephone calls on behalf of the clinic front desk, responds with realistic audio synthesis, and allows practice owners to record custom audio greetings via their microphone directly in the browser.
+- **Omnichannel Call-to-Chat Revert:** Callers can be sent an immediate SMS with a direct interactive link (`/book-chat/:tenantSlug`) so they can visually browse and choose available dental chair slots on their phone screen.
+- **Dual Confirmation Dispatch (SMS + Email):** Every committed booking automatically dispatches both an instant SMS confirmation to the patient's phone and a detailed calendar confirmation email to their inbox.
 - **Zero Hallucination Tool-Calling Engine:** The AI language model does not fabricate availability or booking confirmations. Every slot calculation, conflict check, and reservation is executed and committed via server-validated backend tools with transaction locks.
 - **Clinical Dental Safety Guardrails:** Strict built-in guardrails refuse requests for medical/dental diagnoses or prescription drugs, and immediately route acute dental emergencies (severe swelling, trauma, airway restriction) to emergency protocols.
 - **Strict Multi-Tenant Isolation:** Database constraints and server authorization layers guarantee that one practice can never access another clinic's appointments, patients, knowledge documents, or billing.
@@ -88,7 +91,7 @@ npm run db:seed
 ```bash
 npm test
 ```
-*Executes all 6 integration test suites: Authentication, Multi-Tenant Data Isolation, Concurrency Double-Booking Prevention, Dental Safety Triage, Public Chat Widget, and Super-Admin Control Plane.*
+*Executes all 7 integration test suites: Authentication, Multi-Tenant Data Isolation, Concurrency Double-Booking Prevention, Dental Safety Triage, Public Chat Widget, Super-Admin Control Plane, and AI Phone Receptionist with Call-to-Chat & Dual Confirmations.*
 
 ### Step 4: Start Applications
 ```bash
