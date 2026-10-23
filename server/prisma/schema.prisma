@@ -35,6 +35,7 @@ model Tenant {
   auditLogs            AuditLog[]
   notificationJobs     NotificationJob[]
   callLogs             CallLog[]
+  telemetryRecords     InteractionTelemetry[]
 }
 
 model User {
@@ -173,6 +174,9 @@ model Customer {
   name               String
   email              String
   phone              String?
+  dateOfBirth        String?
+  insuranceProvider  String?
+  emergencyContact   String?
   notes              String?
   isExistingPatient  Boolean        @default(false)
   totalAppointments  Int            @default(0)
@@ -196,6 +200,11 @@ model Appointment {
   endTime                 DateTime
   status                  String            @default("CONFIRMED") // CONFIRMED, PENDING, CANCELLED, COMPLETED, NO_SHOW
   notes                   String?
+  chiefComplaint          String?           // Dental reason for visit / symptoms
+  patientType             String?           @default("NEW_PATIENT") // NEW_PATIENT, RETURNING_PATIENT
+  insuranceProvider       String?           // e.g. Delta Dental, MetLife, Cigna, Self-Pay
+  specialAccommodations   String?           // e.g. Severe Dental Anxiety / Sedation, Wheelchair
+  sessionMetadata         String?           // JSON string of device, session ID, time spent, duplicate clicks prevented
   cancellationReason      String?
   bookedVia               String            @default("AI_WIDGET") // AI_WIDGET, AI_PHONE, DASHBOARD, MANUAL
   externalCalendarEventId String?
@@ -207,6 +216,7 @@ model Appointment {
   service                 Service           @relation(fields: [serviceId], references: [id], onDelete: Cascade)
   staffMember             StaffMember?      @relation(fields: [staffMemberId], references: [id], onDelete: SetNull)
   notificationJobs        NotificationJob[]
+  telemetryRecords        InteractionTelemetry[]
 }
 
 model AgentConfiguration {
@@ -381,4 +391,41 @@ model CallLog {
   createdAt        DateTime     @default(now())
 
   tenant           Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model IdempotencyRecord {
+  id             String   @id @default(cuid())
+  key            String   @unique
+  tenantId       String?
+  endpoint       String
+  method         String
+  requestHash    String
+  statusCode     Int
+  responseBody   String
+  preventedCount Int      @default(0)
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime
+}
+
+model InteractionTelemetry {
+  id                       String       @id @default(cuid())
+  tenantId                 String
+  sessionId                String
+  eventType                String       // SESSION_START, WIDGET_OPEN, SERVICE_SELECT, SLOT_BROWSE, SLOT_SELECT, DETAILS_INPUT, DUPLICATE_CLICK_PREVENTED, BOOKING_SUBMITTED, BOOKING_CONFIRMED, ABANDONED
+  channel                  String       @default("WEB_WIDGET") // WEB_WIDGET, CALL_TO_CHAT, DEMO, DIRECT_LINK, DASHBOARD
+  customerEmail            String?
+  customerPhone            String?
+  deviceType               String?      // Desktop, Mobile, Tablet
+  browser                  String?
+  os                       String?
+  screenResolution         String?
+  referrer                 String?
+  timeSpentSeconds         Int          @default(0)
+  duplicateClicksMitigated Int          @default(0)
+  metadata                 String?      // JSON string of event-specific metadata
+  appointmentId            String?
+  createdAt                DateTime     @default(now())
+
+  tenant                   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointment              Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
 }

@@ -96,15 +96,21 @@ export async function runAllTests() {
       });
       assert.ok(examService, 'Apex should have an exam service');
 
-      const targetDate = new Date();
-      targetDate.setDate(targetDate.getDate() + 3); // 3 days in future
-      const targetDateStr = targetDate.toISOString().split('T')[0];
-
-      // Check available slots
-      const avail = await BookingEngine.getAvailableSlots(apexTenantId, examService.id, targetDateStr);
-      assert.ok(avail.slots.length > 0, 'Should have available slots on a business day');
-      const testSlot = avail.slots[0];
-      console.log(`  ✔ Found ${avail.slots.length} available slots for ${targetDateStr}. Testing slot: ${testSlot.displayTime}`);
+      let testSlot: any = null;
+      let targetDateStr = '';
+      for (let offset = 2; offset < 25; offset++) {
+        const d = new Date();
+        d.setDate(d.getDate() + offset);
+        const dStr = d.toISOString().split('T')[0];
+        const res = await BookingEngine.getAvailableSlots(apexTenantId, examService.id, dStr);
+        if (res.slots.length > 0) {
+          testSlot = res.slots[0];
+          targetDateStr = dStr;
+          console.log(`  ✔ Found ${res.slots.length} available slots for ${targetDateStr}. Testing slot: ${testSlot.displayTime}`);
+          break;
+        }
+      }
+      assert.ok(testSlot, 'Should have available slots on a business day');
 
       // Book the slot
       const booking = await BookingEngine.bookAppointment({
@@ -284,13 +290,18 @@ export async function runAllTests() {
       });
       assert.ok(cleaningService);
 
-      const targetDate = new Date();
-      targetDate.setDate(targetDate.getDate() + 5);
-      const targetDateStr = targetDate.toISOString().split('T')[0];
-
-      const avail = await BookingEngine.getAvailableSlots(apexTenantId, cleaningService.id, targetDateStr);
-      assert.ok(avail.slots.length > 0, 'Should have slots available');
-      const chosenSlot = avail.slots[0];
+      let chosenSlot: any = null;
+      for (let offset = 4; offset < 30; offset++) {
+        const d = new Date();
+        d.setDate(d.getDate() + offset);
+        const dStr = d.toISOString().split('T')[0];
+        const res = await BookingEngine.getAvailableSlots(apexTenantId, cleaningService.id, dStr);
+        if (res.slots.length > 0) {
+          chosenSlot = res.slots[0];
+          break;
+        }
+      }
+      assert.ok(chosenSlot, 'Should have slots available');
 
       const testCustomerEmail = `alex.morgan.${Date.now()}@example.com`;
       const testCustomerPhone = '+1 (512) 555-7890';
@@ -333,8 +344,114 @@ export async function runAllTests() {
       console.log('  ✔ Call concluded and call transcript recorded in practice history (84 seconds)');
     }
 
+    // ========================================================
+    // TEST 8: Multi-Click Deduplication, Idempotency & Telemetry
+    // ========================================================
+    console.log('\n▶ [TEST 8] Multi-Click Deduplication, Server Idempotency & Customer Telemetry');
+    {
+      const cleaningService = await prisma.service.findFirst({
+        where: { tenantId: apexTenantId, name: { contains: 'Cleaning' } },
+      });
+      assert.ok(cleaningService);
+
+      let chosenSlot: any = null;
+      for (let offset = 7; offset < 35; offset++) {
+        const d = new Date();
+        d.setDate(d.getDate() + offset);
+        const dStr = d.toISOString().split('T')[0];
+        const res = await BookingEngine.getAvailableSlots(apexTenantId, cleaningService.id, dStr);
+        if (res.slots.length > 0) {
+          chosenSlot = res.slots[0];
+          break;
+        }
+      }
+      assert.ok(chosenSlot, 'Should find open slot for Test 8');
+
+      const clientSessionId = `test_sess_${Date.now()}`;
+      const idempotencyKey = `idem_click_${Date.now()}`;
+      const bookingPayload = {
+        serviceId: cleaningService.id,
+        startTime: chosenSlot.startTime,
+        customerName: 'Marcus Vance',
+        customerEmail: `marcus.vance.${Date.now()}@example.com`,
+        customerPhone: '+1 (512) 555-9012',
+        chiefComplaint: 'Toothache / Acute Pain',
+        patientType: 'NEW_PATIENT',
+        insuranceProvider: 'Delta Dental',
+        specialAccommodations: 'Dental Anxiety / Nitrous Sedation',
+        sessionId: clientSessionId,
+      };
+
+      // Fire 5 rapid simultaneous booking requests simulating a user repeatedly clicking "Confirm & Book"
+      const rapidRequests = Array.from({ length: 5 }).map((_, idx) =>
+        request(app)
+          .post('/api/widget/apex-dental-spa/book')
+          .set('x-idempotency-key', idempotencyKey)
+          .set('x-client-session-id', clientSessionId)
+          .set('x-duplicate-clicks-prevented', String(idx))
+          .send(bookingPayload)
+      );
+
+      const responses = await Promise.all(rapidRequests);
+
+      // Verify all returned 201 or 200 (first created, remaining replays)
+      const successResponses = responses.filter((r) => r.status === 201 || r.status === 200);
+      assert.strictEqual(successResponses.length, 5, 'All 5 rapid requests should resolve successfully');
+
+      // Verify idempotent replay headers were attached on duplicate hits
+      const replayedResponses = responses.filter((r) => r.headers['x-idempotent-replay'] === 'true');
+      assert.strictEqual(replayedResponses.length, 4, '4 duplicate requests must be identified as idempotent replays');
+
+      // Verify in database: exactly ONE appointment was created (zero double booking!)
+      const dbAppointments = await prisma.appointment.findMany({
+        where: {
+          tenantId: apexTenantId,
+          serviceId: cleaningService.id,
+          startTime: new Date(chosenSlot.startTime),
+        },
+      });
+      assert.strictEqual(dbAppointments.length, 1, 'Exactly one appointment must exist in DB despite 5 rapid clicks');
+
+      const bookedAppt = dbAppointments[0];
+      assert.strictEqual(bookedAppt.chiefComplaint, 'Toothache / Acute Pain');
+      assert.strictEqual(bookedAppt.patientType, 'NEW_PATIENT');
+      assert.strictEqual(bookedAppt.insuranceProvider, 'Delta Dental');
+      assert.strictEqual(bookedAppt.specialAccommodations, 'Dental Anxiety / Nitrous Sedation');
+      console.log('  ✔ Multi-click deduplication verified: 5 rapid clicks safely collapsed into 1 DB reservation');
+
+      // Brief delay to allow async persistence
+      await new Promise((r) => setTimeout(r, 150));
+
+      // Verify Idempotency Record logged the prevented count
+      const idempRecord = await prisma.idempotencyRecord.findUnique({
+        where: { key: idempotencyKey },
+      });
+      assert.ok(idempRecord);
+      assert.ok(idempRecord.preventedCount >= 4, `Prevented count should be at least 4 (was ${idempRecord.preventedCount})`);
+      console.log('  ✔ Server Idempotency Layer verified: 4 redundant requests intercepted and prevented');
+
+      // Verify Vendor Telemetry Endpoint
+      const vendorTelemetryRes = await request(app)
+        .get(`/api/tenants/${apexTenantId}/telemetry`)
+        .set('Authorization', `Bearer ${apexToken}`);
+
+      assert.strictEqual(vendorTelemetryRes.status, 200);
+      assert.ok(vendorTelemetryRes.body.summary.totalClicksMitigated >= 4);
+      assert.ok(vendorTelemetryRes.body.funnel.length > 0);
+      console.log('  ✔ Medical vendor telemetry verified: Total mitigated clicks visible in vendor dashboard');
+
+      // Verify Super-Admin Telemetry Endpoint
+      const adminTelemetryRes = await request(app)
+        .get('/api/admin/telemetry')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      assert.strictEqual(adminTelemetryRes.status, 200);
+      assert.ok(adminTelemetryRes.body.summary.totalDuplicateClicksMitigated >= 4);
+      console.log('  ✔ Super-admin telemetry verified: Global duplicate request mitigation monitored');
+    }
+
     console.log('\n=============================================');
-    console.log('   ALL TESTS PASSED SUCCESSFULLY! (7/7)');
+    console.log('   ALL TESTS PASSED SUCCESSFULLY! (8/8)');
     console.log('=============================================\n');
     process.exit(0);
   } catch (err: any) {

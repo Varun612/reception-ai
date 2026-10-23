@@ -9,11 +9,16 @@ const router = Router();
 const CreateAppointmentSchema = z.object({
   serviceId: z.string().min(1),
   staffMemberId: z.string().optional(),
-  startTime: z.string().datetime(),
+  startTime: z.string(),
   customerName: z.string().min(2),
   customerEmail: z.string().email(),
   customerPhone: z.string().optional(),
   notes: z.string().optional(),
+  chiefComplaint: z.string().optional(),
+  patientType: z.string().optional(),
+  insuranceProvider: z.string().optional(),
+  specialAccommodations: z.string().optional(),
+  dateOfBirth: z.string().optional(),
 });
 
 /**
@@ -79,6 +84,11 @@ router.post('/:tenantId/appointments', authenticateUser, requireTenant, async (r
       customerEmail: data.customerEmail,
       customerPhone: data.customerPhone,
       notes: data.notes,
+      chiefComplaint: data.chiefComplaint,
+      patientType: data.patientType,
+      insuranceProvider: data.insuranceProvider,
+      specialAccommodations: data.specialAccommodations,
+      dateOfBirth: data.dateOfBirth,
       bookedVia: 'MANUAL',
     });
 

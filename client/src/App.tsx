@@ -27,6 +27,7 @@ import { OnboardingWizard } from './pages/onboarding/OnboardingWizard.js';
 import { DashboardLayout } from './components/DashboardLayout.js';
 import { OverviewPage } from './pages/dashboard/OverviewPage.js';
 import { AppointmentsPage } from './pages/dashboard/AppointmentsPage.js';
+import { PatientJourneyTelemetryPage } from './pages/dashboard/PatientJourneyTelemetryPage.js';
 import { AgentSettingsPage } from './pages/dashboard/AgentSettingsPage.js';
 import { PhoneReceptionistPage } from './pages/dashboard/PhoneReceptionistPage.js';
 import { ServicesStaffPage } from './pages/dashboard/ServicesStaffPage.js';
@@ -110,6 +111,7 @@ export const App: React.FC = () => {
       >
         <Route index element={<OverviewPage />} />
         <Route path="appointments" element={<AppointmentsPage />} />
+        <Route path="telemetry" element={<PatientJourneyTelemetryPage />} />
         <Route path="agent" element={<AgentSettingsPage />} />
         <Route path="phone" element={<PhoneReceptionistPage />} />
         <Route path="services" element={<ServicesStaffPage />} />

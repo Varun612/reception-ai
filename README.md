@@ -4,7 +4,7 @@
 [![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev/)
 [![Prisma](https://img.shields.io/badge/Prisma-6.4-2D3748.svg)](https://www.prisma.io/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-38B2AC.svg)](https://tailwindcss.com/)
-[![Tests](https://img.shields.io/badge/Tests-Passing%20(7%2F7)-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-Passing%20(8%2F8)-brightgreen.svg)]()
 
 > **"Your AI Receptionist. Always Ready."**  
 > Answer more inquiries, book more appointments, and give every patient a better first impression.
@@ -16,6 +16,9 @@
 **ReceptionAI** is a multi-tenant, subscription-based B2B SaaS platform that enables appointment-based businesses—starting with dental clinics in the US, UK, Canada, and Australia—to deploy autonomous, 24/7 AI receptionists that handle patient inquiries and book appointments directly into their calendar.
 
 ### Key Differentiators:
+- **Multi-Click Deduplication & Server Idempotency Guard:** Client-side in-flight locking, debounce cooldown, and server-side synchronous idempotency middleware intercept rapid duplicate clicks, preventing multiple requests from reaching or straining the server. Both the clinic vendor and platform super-admin can inspect live counts of redundant hits saved.
+- **End-to-End Customer Interaction Telemetry & Metadata Study:** In-depth tracking of customer touchpoints from initial visit to confirmed booking. Medical vendors can study drop-off rates across the booking funnel, inspect individual session metadata (device, browser, referrer, time-to-book, click telemetry), and examine patient chart tags (New vs Returning, Chief Complaint, Dental Insurance, Accommodations).
+- **Comprehensive Patient Details Booking:** The booking workflow captures complete clinical and administrative patient details (Full Name, Phone, Email, DOB, Patient Type, Dental Complaint / Reason for visit, Insurance Provider, and Accommodations/Allergies) before committing the appointment.
 - **AI Phone Receptionist & Voice Studio:** An intelligent voice agent that answers inbound telephone calls on behalf of the clinic front desk, responds with realistic audio synthesis, and allows practice owners to record custom audio greetings via their microphone directly in the browser.
 - **Omnichannel Call-to-Chat Revert:** Callers can be sent an immediate SMS with a direct interactive link (`/book-chat/:tenantSlug`) so they can visually browse and choose available dental chair slots on their phone screen.
 - **Dual Confirmation Dispatch (SMS + Email):** Every committed booking automatically dispatches both an instant SMS confirmation to the patient's phone and a detailed calendar confirmation email to their inbox.

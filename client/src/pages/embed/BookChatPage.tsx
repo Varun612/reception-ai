@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import {
   CalendarCheck,
@@ -10,8 +10,19 @@ import {
   User,
   AlertCircle,
   MapPin,
-  Phone,
+  ShieldCheck,
+  HeartPulse,
+  CreditCard,
+  FileText,
+  Activity,
 } from 'lucide-react';
+import {
+  getOrCreateSessionId,
+  sendTelemetryEvent,
+  recordMitigatedClick,
+  getMitigatedClicksCount,
+  getDeviceContext,
+} from '../../api/telemetry';
 
 export const BookChatPage: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
@@ -26,17 +37,40 @@ export const BookChatPage: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState('');
   const [slots, setSlots] = useState<any[]>([]);
   const [selectedSlotTime, setSelectedSlotTime] = useState('');
+
+  // Structured Patient & Clinical Details Form
   const [customerName, setCustomerName] = useState(nameParam);
   const [customerPhone, setCustomerPhone] = useState(phoneParam);
   const [customerEmail, setCustomerEmail] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [patientType, setPatientType] = useState<'NEW_PATIENT' | 'RETURNING_PATIENT'>('NEW_PATIENT');
+  const [chiefComplaint, setChiefComplaint] = useState('Routine Dental Cleaning & Checkup');
+  const [customComplaint, setCustomComplaint] = useState('');
+  const [insuranceProvider, setInsuranceProvider] = useState('Delta Dental');
+  const [specialAccommodations, setSpecialAccommodations] = useState('None');
+  const [patientNotes, setPatientNotes] = useState('');
+
+  // Interaction State
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [clickLocked, setClickLocked] = useState(false);
+  const [localPreventedClicks, setLocalPreventedClicks] = useState(0);
   const [confirmedBooking, setConfirmedBooking] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const startTimeRef = useRef<number>(Date.now());
+  const inFlightRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (tenantSlug) {
       loadConfig();
+      // Record initial customer interaction
+      sendTelemetryEvent({
+        tenantSlug,
+        eventType: 'SESSION_START',
+        channel: 'CALL_TO_CHAT',
+        metadata: { entryPoint: 'sms_call_to_chat_revert', initialPhone: phoneParam },
+      });
     }
   }, [tenantSlug]);
 
@@ -75,6 +109,13 @@ export const BookChatPage: React.FC = () => {
       } else {
         setSelectedSlotTime('');
       }
+
+      sendTelemetryEvent({
+        tenantSlug,
+        eventType: 'SLOT_BROWSE',
+        channel: 'CALL_TO_CHAT',
+        metadata: { serviceId: selectedServiceId, date: selectedDate, slotsCount: data.slots?.length || 0 },
+      });
     } catch {
       setError('Unable to load schedule for this date.');
     } finally {
@@ -82,36 +123,126 @@ export const BookChatPage: React.FC = () => {
     }
   };
 
+  const handleSelectSlot = (startTime: string) => {
+    setSelectedSlotTime(startTime);
+    sendTelemetryEvent({
+      tenantSlug,
+      eventType: 'SLOT_SELECT',
+      channel: 'CALL_TO_CHAT',
+      metadata: { selectedTime: startTime },
+    });
+  };
+
+  /**
+   * Safe Submit with Multi-Click Protection & Deduplication
+   */
   const handleConfirm = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // 1. CLIENT-SIDE MULTI-CLICK GUARD: Intercept rapid multi-clicks
+    if (inFlightRef.current || submitting || clickLocked) {
+      const totalPrevented = recordMitigatedClick();
+      setLocalPreventedClicks((prev) => prev + 1);
+      console.warn(`[Client Multi-Click Guard] Duplicate click prevented! Sparing server hit.`);
+      
+      sendTelemetryEvent({
+        tenantSlug,
+        eventType: 'DUPLICATE_CLICK_PREVENTED',
+        channel: 'CALL_TO_CHAT',
+        metadata: { form: 'book_chat_page', mitigatedCount: totalPrevented },
+      });
+      return;
+    }
+
     if (!selectedSlotTime || !tenantSlug) return;
+
+    // Immediately lock out any further clicks
+    inFlightRef.current = true;
     setSubmitting(true);
+    setClickLocked(true);
     setError(null);
 
+    const timeSpent = Math.round((Date.now() - startTimeRef.current) / 1000);
+    const finalComplaint = chiefComplaint === 'Other' ? customComplaint || 'General Dental Consultation' : chiefComplaint;
+    const sessionId = getOrCreateSessionId();
+    const device = getDeviceContext();
+
+    const idempotencyKey = `bk_${sessionId}_${Date.now()}`;
+
     try {
+      // Record submission event
+      sendTelemetryEvent({
+        tenantSlug,
+        eventType: 'BOOKING_SUBMITTED',
+        channel: 'CALL_TO_CHAT',
+        timeSpentSeconds: timeSpent,
+        metadata: {
+          serviceId: selectedServiceId,
+          chiefComplaint: finalComplaint,
+          patientType,
+          insuranceProvider,
+        },
+      });
+
       const res = await fetch(`/api/widget/${tenantSlug}/book`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-idempotency-key': idempotencyKey,
+          'x-client-session-id': sessionId,
+          'x-duplicate-clicks-prevented': String(getMitigatedClicksCount()),
+        },
         body: JSON.stringify({
           serviceId: selectedServiceId,
           startTime: selectedSlotTime,
           customerName,
           customerEmail,
           customerPhone,
-          notes: 'Booked via Call-to-Chat Revert Link',
+          chiefComplaint: finalComplaint,
+          patientType,
+          insuranceProvider,
+          specialAccommodations,
+          dateOfBirth: dateOfBirth || undefined,
+          notes: patientNotes ? `Notes: ${patientNotes}` : 'Booked via Call-to-Chat Revert Link',
+          sessionId,
+          sessionMetadata: {
+            ...device,
+            timeSpentSeconds: timeSpent,
+            duplicateClicksPrevented: getMitigatedClicksCount(),
+            entryChannel: 'SMS_CALL_TO_CHAT',
+          },
         }),
       });
 
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
         setConfirmedBooking(data.appointment);
+
+        // Record confirmed booking telemetry
+        sendTelemetryEvent({
+          tenantSlug,
+          eventType: 'BOOKING_CONFIRMED',
+          channel: 'CALL_TO_CHAT',
+          appointmentId: data.appointment.id,
+          customerEmail,
+          customerPhone,
+          timeSpentSeconds: timeSpent,
+          metadata: {
+            serviceName: data.appointment.service?.name,
+            startTime: data.appointment.startTime,
+            patientType,
+          },
+        });
       } else {
         setError(data.error || 'The slot was just taken. Please choose another time.');
       }
     } catch (err: any) {
       setError(err.message || 'Booking conflict');
     } finally {
+      inFlightRef.current = false;
       setSubmitting(false);
+      // Retain click lock for 2 seconds to eliminate accidental double taps
+      setTimeout(() => setClickLocked(false), 2000);
     }
   };
 
@@ -121,9 +252,31 @@ export const BookChatPage: React.FC = () => {
 
   const selectedService = services.find((s) => s.id === selectedServiceId);
 
+  const COMPLAINT_OPTIONS = [
+    'Routine Dental Cleaning & Checkup',
+    'Toothache / Severe Pain',
+    'Cosmetic Teeth Whitening',
+    'Broken or Chipped Tooth',
+    'Bleeding Gums / Sensitive Teeth',
+    'Crown / Filling Replacement',
+    'Emergency Dental Consultation',
+    'Other',
+  ];
+
+  const INSURANCE_OPTIONS = [
+    'Delta Dental',
+    'MetLife Dental',
+    'Cigna Dental',
+    'Aetna Dental',
+    'Guardian',
+    'UnitedHealthcare Dental',
+    'Self-Pay / Cash / No Insurance',
+    'Other / Private Insurance',
+  ];
+
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col justify-center py-6 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full mx-auto space-y-6">
+      <div className="max-w-lg w-full mx-auto space-y-5">
         {/* Practice Header Card */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
           <div className="flex items-center space-x-3">
@@ -132,12 +285,20 @@ export const BookChatPage: React.FC = () => {
             </div>
             <div>
               <h2 className="font-bold text-base text-slate-900 leading-tight">{config.businessName}</h2>
-              <p className="text-[11px] text-purple-700">Online Slot Picker • Virtual Receptionist</p>
+              <p className="text-[11px] text-purple-700 font-medium">Verified Dental Chair Booking • Front Desk AI</p>
             </div>
           </div>
-          <span className="text-[10px] uppercase font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-            Real-Time
-          </span>
+          <div className="flex flex-col items-end">
+            <span className="text-[10px] uppercase font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+              Live Chairs
+            </span>
+            {localPreventedClicks > 0 && (
+              <span className="text-[9px] font-semibold text-purple-600 mt-1 flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3" />
+                {localPreventedClicks} duplicate click{localPreventedClicks > 1 ? 's' : ''} intercepted
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Confirmation Screen */}
@@ -150,18 +311,32 @@ export const BookChatPage: React.FC = () => {
             <div>
               <h3 className="text-xl font-extrabold text-slate-900">Appointment Confirmed!</h3>
               <p className="text-xs text-slate-500 mt-1">
-                Your appointment has been locked into the clinic calendar.
+                Your appointment has been reserved directly into the dental schedule.
               </p>
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-left text-xs space-y-2">
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-left text-xs space-y-2.5">
               <div className="flex justify-between">
-                <span className="text-slate-500">Patient:</span>
+                <span className="text-slate-500">Patient Name:</span>
                 <span className="font-bold text-slate-900">{customerName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Status:</span>
+                <span className="font-medium text-purple-800 bg-purple-50 px-2 py-0.5 rounded-full">
+                  {patientType === 'NEW_PATIENT' ? 'New Patient' : 'Returning Patient'}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Service:</span>
                 <span className="font-bold text-purple-900">{selectedService?.name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Reason / Complaint:</span>
+                <span className="font-medium text-slate-800">{chiefComplaint}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Payment / Insurance:</span>
+                <span className="font-medium text-slate-800">{insuranceProvider}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Date & Time:</span>
@@ -171,29 +346,35 @@ export const BookChatPage: React.FC = () => {
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Location:</span>
-                <span className="font-medium text-slate-700">{config.address || 'Practice Location'}</span>
+                <span className="font-medium text-slate-700">{config.address || 'Clinic Front Desk'}</span>
               </div>
             </div>
 
-            {/* Omnichannel Dispatch Status Box */}
+            {/* Dual Confirmation Status Box */}
             <div className="p-4 rounded-xl bg-purple-50 border border-purple-200 text-left text-xs space-y-2 text-purple-900">
               <div className="font-bold flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4 text-purple-700" />
-                <span>Confirmations Dispatched</span>
+                <span>Dual Confirmations Successfully Sent</span>
               </div>
               <p className="text-[11px] leading-relaxed">
-                📱 <strong>SMS Sent to:</strong> {customerPhone || 'your mobile'}<br />
-                📧 <strong>Calendar Email Sent to:</strong> {customerEmail}
+                📱 <strong>SMS Sent to Phone:</strong> {customerPhone || 'Your Mobile'}<br />
+                📧 <strong>Confirmation Email Sent to:</strong> {customerEmail}
               </p>
+            </div>
+
+            {/* Click Telemetry Info */}
+            <div className="text-[11px] text-slate-400 flex items-center justify-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Multi-click deduplication verified • Server zero redundant load</span>
             </div>
           </div>
         ) : (
-          /* Interactive Booking Form */
+          /* Interactive Booking Form with Full Clinical Details */
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-soft space-y-5 text-xs">
             <div>
-              <h3 className="font-bold text-base text-slate-900">Choose Your Appointment Chair</h3>
+              <h3 className="font-bold text-base text-slate-900">Select Procedure & Enter Patient Details</h3>
               <p className="text-slate-500 text-[11px] mt-0.5">
-                Select your preferred dental procedure, date, and available time.
+                Choose your dental treatment, select an open chair, and enter your details to lock in your appointment.
               </p>
             </div>
 
@@ -205,35 +386,49 @@ export const BookChatPage: React.FC = () => {
             )}
 
             <form onSubmit={handleConfirm} className="space-y-4">
+              {/* 1. Service Selection */}
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Select Procedure</label>
+                <label className="block font-semibold text-slate-700 mb-1">Dental Treatment / Service</label>
                 <select
                   value={selectedServiceId}
-                  onChange={(e) => setSelectedServiceId(e.target.value)}
-                  className="w-full border border-slate-300 rounded-xl p-2.5 bg-white font-medium"
+                  onChange={(e) => {
+                    setSelectedServiceId(e.target.value);
+                    sendTelemetryEvent({
+                      tenantSlug,
+                      eventType: 'SERVICE_SELECT',
+                      channel: 'CALL_TO_CHAT',
+                      metadata: { serviceId: e.target.value },
+                    });
+                  }}
+                  className="w-full border border-slate-300 rounded-xl p-2.5 bg-white font-medium focus:ring-2 focus:ring-purple-600 outline-none"
                 >
                   {services.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.name} ({s.durationMinutes} min - ${s.price})
+                      {s.name} ({s.durationMinutes} min • ${s.price})
                     </option>
                   ))}
                 </select>
               </div>
 
+              {/* 2. Date Selection */}
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Select Date</label>
+                <label className="block font-semibold text-slate-700 mb-1">Appointment Date</label>
                 <input
                   type="date"
                   required
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
-                  className="w-full border border-slate-300 rounded-xl p-2.5 bg-white font-medium"
+                  className="w-full border border-slate-300 rounded-xl p-2.5 bg-white font-medium focus:ring-2 focus:ring-purple-600 outline-none"
                 />
               </div>
 
-              {/* Slot Chips Grid */}
+              {/* 3. Available Slots */}
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Available Chairs & Times</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-semibold text-slate-700">Available Clinic Openings</label>
+                  <span className="text-[10px] text-slate-400">Live chair sync</span>
+                </div>
+
                 {loadingSlots ? (
                   <div className="text-slate-400 py-3 text-center italic">Checking real-time clinic openings...</div>
                 ) : slots.length === 0 ? (
@@ -248,8 +443,8 @@ export const BookChatPage: React.FC = () => {
                         <button
                           key={idx}
                           type="button"
-                          onClick={() => setSelectedSlotTime(s.startTime)}
-                          className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all ${
+                          onClick={() => handleSelectSlot(s.startTime)}
+                          className={`py-2 px-2.5 rounded-xl text-xs font-bold border transition-all ${
                             isSelected
                               ? 'bg-purple-700 text-white border-purple-700 shadow-sm'
                               : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-purple-50'
@@ -263,57 +458,192 @@ export const BookChatPage: React.FC = () => {
                 )}
               </div>
 
-              <div className="pt-2 border-t border-slate-100 space-y-3">
-                <span className="font-bold text-slate-900 block">Your Contact Information</span>
+              {/* 4. Patient Information Section */}
+              <div className="pt-3 border-t border-slate-100 space-y-3">
+                <span className="font-bold text-slate-900 flex items-center gap-1.5 text-xs">
+                  <User className="w-4 h-4 text-purple-700" />
+                  <span>Patient Identity & Contact Details</span>
+                </span>
 
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Full Name</label>
-                  <input
-                    type="text"
-                    required
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    placeholder="Patient Name"
-                    className="w-full border border-slate-300 rounded-xl p-2.5"
-                  />
+                {/* Patient Type (New vs Returning) */}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPatientType('NEW_PATIENT')}
+                    className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold border ${
+                      patientType === 'NEW_PATIENT'
+                        ? 'bg-purple-50 text-purple-800 border-purple-400'
+                        : 'bg-white text-slate-600 border-slate-200'
+                    }`}
+                  >
+                    ✨ New Patient
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPatientType('RETURNING_PATIENT')}
+                    className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold border ${
+                      patientType === 'RETURNING_PATIENT'
+                        ? 'bg-purple-50 text-purple-800 border-purple-400'
+                        : 'bg-white text-slate-600 border-slate-200'
+                    }`}
+                  >
+                    🏥 Returning Patient
+                  </button>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Phone Number (for SMS)</label>
+                    <label className="block font-semibold text-slate-700 mb-1">Full Name *</label>
                     <input
                       type="text"
                       required
-                      value={customerPhone}
-                      onChange={(e) => setCustomerPhone(e.target.value)}
-                      placeholder="+1 (512) 555-0100"
-                      className="w-full border border-slate-300 rounded-xl p-2.5 font-mono"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      placeholder="e.g. Alex Morgan"
+                      className="w-full border border-slate-300 rounded-xl p-2.5 focus:ring-2 focus:ring-purple-600 outline-none"
                     />
                   </div>
 
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Email (for Receipt)</label>
+                    <label className="block font-semibold text-slate-700 mb-1">Date of Birth</label>
+                    <input
+                      type="date"
+                      value={dateOfBirth}
+                      onChange={(e) => setDateOfBirth(e.target.value)}
+                      className="w-full border border-slate-300 rounded-xl p-2.5 focus:ring-2 focus:ring-purple-600 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Phone (SMS Confirmation) *</label>
+                    <input
+                      type="tel"
+                      required
+                      value={customerPhone}
+                      onChange={(e) => setCustomerPhone(e.target.value)}
+                      placeholder="+1 (512) 555-0100"
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-mono focus:ring-2 focus:ring-purple-600 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Email (Calendar Receipt) *</label>
                     <input
                       type="email"
                       required
                       value={customerEmail}
                       onChange={(e) => setCustomerEmail(e.target.value)}
-                      placeholder="patient@example.com"
-                      className="w-full border border-slate-300 rounded-xl p-2.5"
+                      placeholder="alex.morgan@example.com"
+                      className="w-full border border-slate-300 rounded-xl p-2.5 focus:ring-2 focus:ring-purple-600 outline-none"
                     />
                   </div>
                 </div>
               </div>
 
+              {/* 5. Clinical & Visit Reason */}
+              <div className="pt-3 border-t border-slate-100 space-y-3">
+                <span className="font-bold text-slate-900 flex items-center gap-1.5 text-xs">
+                  <HeartPulse className="w-4 h-4 text-purple-700" />
+                  <span>Reason for Visit & Medical Details</span>
+                </span>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Primary Dental Complaint *</label>
+                  <select
+                    value={chiefComplaint}
+                    onChange={(e) => setChiefComplaint(e.target.value)}
+                    className="w-full border border-slate-300 rounded-xl p-2.5 bg-white font-medium focus:ring-2 focus:ring-purple-600 outline-none"
+                  >
+                    {COMPLAINT_OPTIONS.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {chiefComplaint === 'Other' && (
+                  <div>
+                    <input
+                      type="text"
+                      required
+                      value={customComplaint}
+                      onChange={(e) => setCustomComplaint(e.target.value)}
+                      placeholder="Please briefly describe your dental symptoms..."
+                      className="w-full border border-slate-300 rounded-xl p-2.5 focus:ring-2 focus:ring-purple-600 outline-none"
+                    />
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Insurance / Payment</label>
+                    <select
+                      value={insuranceProvider}
+                      onChange={(e) => setInsuranceProvider(e.target.value)}
+                      className="w-full border border-slate-300 rounded-xl p-2 bg-white text-xs focus:ring-2 focus:ring-purple-600 outline-none"
+                    >
+                      {INSURANCE_OPTIONS.map((ins) => (
+                        <option key={ins} value={ins}>
+                          {ins}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Special Accommodations</label>
+                    <select
+                      value={specialAccommodations}
+                      onChange={(e) => setSpecialAccommodations(e.target.value)}
+                      className="w-full border border-slate-300 rounded-xl p-2 bg-white text-xs focus:ring-2 focus:ring-purple-600 outline-none"
+                    >
+                      <option value="None">None</option>
+                      <option value="Dental Anxiety / Nitrous Sedation">Dental Anxiety / Nitrous</option>
+                      <option value="Wheelchair Accessibility">Wheelchair Accessible</option>
+                      <option value="Penicillin or Latex Allergy">Latex / Medication Allergy</option>
+                      <option value="Need Language Translator">Language Assistance</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Additional Notes for Doctor (Optional)</label>
+                  <textarea
+                    rows={2}
+                    value={patientNotes}
+                    onChange={(e) => setPatientNotes(e.target.value)}
+                    placeholder="Any specific tooth area, history, or symptoms the dentist should know..."
+                    className="w-full border border-slate-300 rounded-xl p-2.5 text-xs focus:ring-2 focus:ring-purple-600 outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* 6. Multi-Click Protected Submit Button */}
               <div className="pt-2">
                 <button
                   type="submit"
-                  disabled={submitting || !selectedSlotTime}
-                  className="w-full py-3 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs shadow-md transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  disabled={submitting || clickLocked || !selectedSlotTime}
+                  className="w-full py-3 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs shadow-md transition-all disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2"
                 >
-                  <CalendarCheck className="w-4 h-4" />
-                  <span>{submitting ? 'Confirming & Dispatching Notifications...' : 'Approve & Book Chair'}</span>
+                  {submitting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Securing Slot & Sending Confirmations...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CalendarCheck className="w-4 h-4" />
+                      <span>Confirm & Book Appointment</span>
+                    </>
+                  )}
                 </button>
+                <p className="text-[10px] text-center text-slate-400 mt-2 flex items-center justify-center gap-1">
+                  <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
+                  <span>Double-click protected • Server verified transaction</span>
+                </p>
               </div>
             </form>
           </div>

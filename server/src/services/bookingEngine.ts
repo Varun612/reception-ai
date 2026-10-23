@@ -18,6 +18,12 @@ export interface BookAppointmentInput {
   customerEmail: string;
   customerPhone?: string;
   notes?: string;
+  chiefComplaint?: string;
+  patientType?: string; // NEW_PATIENT, RETURNING_PATIENT
+  insuranceProvider?: string;
+  specialAccommodations?: string;
+  dateOfBirth?: string;
+  sessionMetadata?: string;
   bookedVia?: string; // AI_WIDGET, AI_PHONE, DASHBOARD, MANUAL
 }
 
@@ -184,6 +190,12 @@ export class BookingEngine {
       customerEmail,
       customerPhone,
       notes,
+      chiefComplaint,
+      patientType = 'NEW_PATIENT',
+      insuranceProvider,
+      specialAccommodations,
+      dateOfBirth,
+      sessionMetadata,
       bookedVia = 'AI_WIDGET',
     } = input;
 
@@ -240,6 +252,9 @@ export class BookingEngine {
       update: {
         name: customerName,
         phone: customerPhone || undefined,
+        insuranceProvider: insuranceProvider || undefined,
+        dateOfBirth: dateOfBirth || undefined,
+        isExistingPatient: patientType === 'RETURNING_PATIENT',
         totalAppointments: { increment: 1 },
       },
       create: {
@@ -247,6 +262,9 @@ export class BookingEngine {
         name: customerName,
         email: normalizedEmail,
         phone: customerPhone,
+        insuranceProvider,
+        dateOfBirth,
+        isExistingPatient: patientType === 'RETURNING_PATIENT',
         totalAppointments: 1,
       },
     });
@@ -262,6 +280,11 @@ export class BookingEngine {
         endTime,
         status: 'CONFIRMED',
         notes: notes || null,
+        chiefComplaint: chiefComplaint || null,
+        patientType: patientType || 'NEW_PATIENT',
+        insuranceProvider: insuranceProvider || null,
+        specialAccommodations: specialAccommodations || null,
+        sessionMetadata: sessionMetadata || null,
         bookedVia,
       },
       include: {

@@ -13,6 +13,8 @@ import widgetRouter from './routes/widget.js';
 import billingRouter from './routes/billing.js';
 import adminRouter from './routes/admin.js';
 import telephonyRouter from './routes/telephony.js';
+import telemetryRouter from './routes/telemetry.js';
+import { idempotencyMiddleware } from './middleware/idempotency.js';
 
 export const app = express();
 
@@ -23,6 +25,9 @@ app.use(cors({
 }));
 
 app.use(express.json());
+
+// Duplicate Click & Rapid Request Mitigation Middleware (Idempotency Engine)
+app.use(idempotencyMiddleware);
 
 // Public Embeddable Widget Script Endpoint
 app.get('/widget.js', (req, res) => {
@@ -118,6 +123,8 @@ app.use('/api/widget', widgetRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/telephony', telephonyRouter);
 app.use('/api/tenants', telephonyRouter);
+app.use('/api/telemetry', telemetryRouter);
+app.use('/api', telemetryRouter);
 
 // Health check
 app.get('/api/health', (req, res) => {

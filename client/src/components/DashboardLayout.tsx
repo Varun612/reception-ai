@@ -17,6 +17,7 @@ import {
   ExternalLink,
   ShieldCheck,
   Building2,
+  Activity,
   Menu,
   X,
 } from 'lucide-react';
@@ -31,6 +32,7 @@ export const DashboardLayout: React.FC = () => {
   const navItems = [
     { name: 'Overview', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Appointments', href: '/dashboard/appointments', icon: CalendarDays },
+    { name: 'Patient Telemetry', href: '/dashboard/telemetry', icon: Activity },
     { name: 'AI Receptionist', href: '/dashboard/agent', icon: Bot },
     { name: 'Phone Receptionist', href: '/dashboard/phone', icon: PhoneCall },
     { name: 'Services & Staff', href: '/dashboard/services', icon: Stethoscope },

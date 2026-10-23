@@ -37,6 +37,10 @@ export const AppointmentsPage: React.FC = () => {
     customerName: '',
     customerEmail: '',
     customerPhone: '',
+    patientType: 'NEW_PATIENT',
+    chiefComplaint: 'Routine Dental Cleaning & Checkup',
+    insuranceProvider: 'Delta Dental',
+    specialAccommodations: 'None',
     notes: '',
   });
   const [modalError, setModalError] = useState<string | null>(null);
@@ -101,6 +105,10 @@ export const AppointmentsPage: React.FC = () => {
           customerName: modalForm.customerName,
           customerEmail: modalForm.customerEmail,
           customerPhone: modalForm.customerPhone,
+          patientType: modalForm.patientType,
+          chiefComplaint: modalForm.chiefComplaint,
+          insuranceProvider: modalForm.insuranceProvider,
+          specialAccommodations: modalForm.specialAccommodations,
           notes: modalForm.notes,
         }),
       });
@@ -114,6 +122,10 @@ export const AppointmentsPage: React.FC = () => {
         customerName: '',
         customerEmail: '',
         customerPhone: '',
+        patientType: 'NEW_PATIENT',
+        chiefComplaint: 'Routine Dental Cleaning & Checkup',
+        insuranceProvider: 'Delta Dental',
+        specialAccommodations: 'None',
         notes: '',
       });
       loadData();
@@ -267,10 +279,31 @@ export const AppointmentsPage: React.FC = () => {
                     return (
                       <tr key={appt.id} className="hover:bg-slate-50/80 transition-colors">
                         <td className="p-4 font-semibold text-slate-900">
-                          {appt.customer?.name}
-                          <div className="text-[10px] text-slate-400 font-normal">
+                          <div className="flex items-center gap-1.5">
+                            <span>{appt.customer?.name}</span>
+                            <span
+                              className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                                appt.patientType === 'RETURNING_PATIENT'
+                                  ? 'bg-purple-100 text-purple-800'
+                                  : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              }`}
+                            >
+                              {appt.patientType === 'RETURNING_PATIENT' ? 'Returning' : 'New Patient'}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-normal mt-0.5">
                             {appt.customer?.email} • {appt.customer?.phone || 'No phone'}
                           </div>
+                          {appt.chiefComplaint && (
+                            <div className="text-[10px] text-purple-700 font-medium mt-1">
+                              🩺 {appt.chiefComplaint}
+                            </div>
+                          )}
+                          {appt.insuranceProvider && (
+                            <div className="text-[9px] text-slate-400">
+                              💳 {appt.insuranceProvider}
+                            </div>
+                          )}
                         </td>
                         <td className="p-4 text-slate-700 font-medium">{appt.service?.name}</td>
                         <td className="p-4 text-slate-600">

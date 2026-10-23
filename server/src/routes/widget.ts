@@ -142,7 +142,21 @@ router.get('/:tenantSlug/availability', async (req: Request, res: Response) => {
 router.post('/:tenantSlug/book', async (req: Request, res: Response) => {
   try {
     const { tenantSlug } = req.params;
-    const { serviceId, startTime, customerName, customerEmail, customerPhone, notes } = req.body;
+    const {
+      serviceId,
+      startTime,
+      customerName,
+      customerEmail,
+      customerPhone,
+      notes,
+      chiefComplaint,
+      patientType,
+      insuranceProvider,
+      specialAccommodations,
+      dateOfBirth,
+      sessionMetadata,
+      sessionId,
+    } = req.body;
 
     const tenant = await prisma.tenant.findUnique({
       where: { slug: tenantSlug },
@@ -160,8 +174,37 @@ router.post('/:tenantSlug/book', async (req: Request, res: Response) => {
       customerEmail,
       customerPhone,
       notes,
+      chiefComplaint,
+      patientType,
+      insuranceProvider,
+      specialAccommodations,
+      dateOfBirth,
+      sessionMetadata: typeof sessionMetadata === 'object' ? JSON.stringify(sessionMetadata) : sessionMetadata,
       bookedVia: 'AI_WIDGET',
     });
+
+    // Record telemetry event for customer journey tracking
+    if (sessionId) {
+      prisma.interactionTelemetry
+        .create({
+          data: {
+            tenantId: tenant.id,
+            sessionId,
+            eventType: 'BOOKING_CONFIRMED',
+            channel: 'WEB_WIDGET',
+            customerEmail,
+            customerPhone,
+            appointmentId: appointment.id,
+            metadata: JSON.stringify({
+              serviceId,
+              chiefComplaint,
+              patientType,
+              insuranceProvider,
+            }),
+          },
+        })
+        .catch(() => {});
+    }
 
     return res.status(201).json({ success: true, appointment });
   } catch (err: any) {
