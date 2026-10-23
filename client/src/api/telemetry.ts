@@ -55,6 +55,8 @@ export function getDeviceContext() {
   };
 }
 
+import { API_BASE } from './client';
+
 export interface TelemetryEventPayload {
   tenantSlug?: string;
   tenantId?: string;
@@ -86,7 +88,7 @@ export async function sendTelemetryEvent(payload: TelemetryEventPayload) {
     const sessionId = getOrCreateSessionId();
     const device = getDeviceContext();
 
-    await fetch('/api/telemetry/event', {
+    await fetch(`${API_BASE}/telemetry/event`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

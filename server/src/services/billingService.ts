@@ -106,11 +106,24 @@ export class BillingService {
    * Process verified webhook event (e.g. checkout.session.completed or invoice.paid)
    */
   static async handleWebhookEvent(payload: any, signature?: string) {
-    // In production, verify Stripe signature using config.stripe.webhookSecret
+    const isMock = payload.mock_success === true;
+
+    // Security Guard: Mock webhooks are strictly forbidden in production unless explicitly running in safe mock mode
+    if (isMock && config.nodeEnv === 'production' && !config.stripe.mockMode) {
+      throw new Error('Forbidden: Simulated webhook activations are disabled in production mode.');
+    }
+
+    // In live mode with Stripe configured, enforce signature presence
+    if (!config.stripe.mockMode && config.stripe.webhookSecret) {
+      if (!signature) {
+        throw new Error('Missing Stripe signature header.');
+      }
+    }
+
     const eventType = payload.type || 'checkout.session.completed';
     const dataObject = payload.data?.object || payload;
 
-    if (eventType === 'checkout.session.completed' || payload.mock_success) {
+    if (eventType === 'checkout.session.completed' || isMock) {
       const tenantId = dataObject.metadata?.tenantId || payload.tenantId;
       const planCode = dataObject.metadata?.planCode || payload.planCode || 'growth';
 

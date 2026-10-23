@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.js';
 import { apiRequest } from '../../api/client.js';
-import { Sparkles, ArrowRight, Lock, Mail, AlertCircle } from 'lucide-react';
+import { Sparkles, ArrowRight, Lock, Mail, AlertCircle, CheckCircle2, X } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
   const { login } = useAuth();
@@ -11,6 +11,13 @@ export const LoginPage: React.FC = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Forgot Password Modal State
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotMessage, setForgotMessage] = useState<string | null>(null);
+  const [forgotError, setForgotError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,10 +44,23 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  const setDemoCredentials = (demoEmail: string, demoPass: string) => {
-    setEmail(demoEmail);
-    setPassword(demoPass);
-    setError(null);
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotError(null);
+    setForgotMessage(null);
+    setForgotLoading(true);
+
+    try {
+      const res = await apiRequest('/auth/forgot-password', {
+        method: 'POST',
+        body: JSON.stringify({ email: forgotEmail }),
+      });
+      setForgotMessage(res.message || 'If an account exists with this email, password reset instructions have been sent.');
+    } catch (err: any) {
+      setForgotError(err.message || 'Failed to submit password reset request.');
+    } finally {
+      setForgotLoading(false);
+    }
   };
 
   return (
@@ -89,7 +109,19 @@ export const LoginPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700">Password</label>
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-semibold text-slate-700">Password</label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForgotEmail(email);
+                    setShowForgotModal(true);
+                  }}
+                  className="text-[11px] text-purple-700 hover:text-purple-800 font-semibold"
+                >
+                  Forgot password?
+                </button>
+              </div>
               <div className="mt-1 relative">
                 <input
                   type="password"
@@ -113,42 +145,99 @@ export const LoginPage: React.FC = () => {
             </button>
           </form>
 
-          {/* Quick Demo Credentials Picker */}
-          <div className="pt-4 border-t border-slate-100 space-y-2">
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider text-center">
-              Quick Test Logins (Demo Seed)
-            </p>
-            <div className="grid grid-cols-1 gap-2">
-              <button
-                type="button"
-                onClick={() => setDemoCredentials('dr.lin@apexdentalspa.com', 'DentalOwner123!')}
-                className="w-full text-left p-2.5 rounded-xl border border-purple-200 bg-purple-50/70 hover:bg-purple-100 transition-colors text-xs"
+          {/* Secure Evaluation Notice for Prospective Clients */}
+          <div className="pt-4 border-t border-slate-100 space-y-3">
+            <div className="text-center text-xs text-slate-500">
+              Evaluating ReceptionAI for your medical practice?
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <Link
+                to="/demo"
+                className="py-2.5 px-3 rounded-xl border border-purple-200 bg-purple-50/70 hover:bg-purple-100 text-purple-700 font-bold text-xs text-center transition-colors flex items-center justify-center gap-1.5"
               >
-                <div className="font-semibold text-purple-900">Dr. Sarah Lin (Apex Dental Spa)</div>
-                <div className="text-[10px] text-purple-600">dr.lin@apexdentalspa.com • US Dental Clinic</div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setDemoCredentials('admin@receptionai.com', 'AdminPassword123!')}
-                className="w-full text-left p-2.5 rounded-xl border border-amber-200 bg-amber-50/70 hover:bg-amber-100 transition-colors text-xs"
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Interactive Sandbox</span>
+              </Link>
+              <Link
+                to="/register"
+                className="py-2.5 px-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-semibold text-xs text-center transition-colors flex items-center justify-center gap-1.5"
               >
-                <div className="font-semibold text-amber-900">Platform Super-Admin</div>
-                <div className="text-[10px] text-amber-700">admin@receptionai.com • Platform Control Plane</div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setDemoCredentials('dr.smith@smilecraft.co.uk', 'LondonDental123!')}
-                className="w-full text-left p-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors text-xs"
-              >
-                <div className="font-semibold text-slate-800">Dr. Arthur Smith (SmileCraft UK)</div>
-                <div className="text-[10px] text-slate-500">dr.smith@smilecraft.co.uk • Multi-Tenant Isolation Test</div>
-              </button>
+                <span>Start Free Trial</span>
+              </Link>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Forgot Password Modal */}
+      {showForgotModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="font-bold text-sm text-slate-900">Reset Practice Password</h3>
+              <button
+                onClick={() => {
+                  setShowForgotModal(false);
+                  setForgotMessage(null);
+                  setForgotError(null);
+                }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {forgotMessage ? (
+              <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                <span>{forgotMessage}</span>
+              </div>
+            ) : (
+              <form onSubmit={handleForgotPassword} className="space-y-4">
+                <p className="text-xs text-slate-600">
+                  Enter your clinic account email address. We will verify your workspace and generate secure password reset instructions.
+                </p>
+
+                {forgotError && (
+                  <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                    <span>{forgotError}</span>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700">Email address</label>
+                  <input
+                    type="email"
+                    required
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    placeholder="doctor@clinic.com"
+                    className="mt-1 w-full text-xs border border-slate-300 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-purple-600"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotModal(false)}
+                    className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={forgotLoading}
+                    className="px-4 py-2 text-xs font-bold text-white bg-purple-700 hover:bg-purple-800 rounded-xl transition-colors disabled:opacity-50"
+                  >
+                    {forgotLoading ? 'Sending...' : 'Send Reset Instructions'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

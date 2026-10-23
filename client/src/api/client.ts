@@ -1,7 +1,7 @@
 import { getOrCreateSessionId, recordMitigatedClick, getMitigatedClicksCount, sendTelemetryEvent } from './telemetry';
 
 const envApiUrl = (import.meta as any).env?.VITE_API_URL;
-const API_BASE = envApiUrl ? `${envApiUrl.replace(/\/$/, '')}/api` : '/api';
+export const API_BASE = envApiUrl ? `${envApiUrl.replace(/\/$/, '')}/api` : '/api';
 
 export class ApiError extends Error {
   status: number;

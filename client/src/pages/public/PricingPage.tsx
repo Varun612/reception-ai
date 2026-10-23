@@ -57,7 +57,7 @@ export const PricingPage: React.FC = () => {
         'AI Voice Receptionist Telephony Module',
         'Priority SLA Support',
         'Multi-location Routing',
-        'HIPAA Compliance Security Package',
+        'Healthcare Administrative Security & Audit Safeguards (BAA Ready)',
         'Custom API & Webhook Integrations',
       ],
       popular: false,

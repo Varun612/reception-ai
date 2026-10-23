@@ -22,6 +22,11 @@ export async function idempotencyMiddleware(req: Request, res: Response, next: N
     return next();
   }
 
+  // Auth endpoints (login, register, forgot-password, reset-password) must always be dynamically evaluated
+  if (req.originalUrl.includes('/auth') || req.path.includes('/auth')) {
+    return next();
+  }
+
   // 1. Identify or generate the idempotency key
   const clientKey = (req.headers['x-idempotency-key'] || req.headers['x-idempotency-key'.toLowerCase()]) as string;
   const clientSessionId = (req.headers['x-client-session-id'] as string) || 'unknown-session';

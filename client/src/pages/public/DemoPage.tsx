@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { apiRequest } from '../../api/client.js';
 import {
   Sparkles,
   Send,
@@ -61,16 +62,14 @@ export const DemoPage: React.FC = () => {
     setLoading(true);
 
     try {
-      const res = await fetch('/api/widget/apex-dental-spa/chat', {
+      const data = await apiRequest('/widget/apex-dental-spa/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: textToSend,
           conversationId,
         }),
       });
 
-      const data = await res.json();
       if (data.conversationId) {
         setConversationId(data.conversationId);
       }

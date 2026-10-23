@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { apiRequest } from '../../api/client.js';
 import {
   Sparkles,
   ArrowRight,
@@ -43,12 +44,10 @@ export const LandingPage: React.FC = () => {
     setHeroLoading(true);
 
     try {
-      const res = await fetch('/api/widget/apex-dental-spa/chat', {
+      const data = await apiRequest('/widget/apex-dental-spa/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: msg }),
       });
-      const data = await res.json();
       setHeroMessages([...newMsgs, { role: 'assistant', text: data.reply || "I'd be happy to help you with that!" }]);
     } catch {
       setHeroMessages([

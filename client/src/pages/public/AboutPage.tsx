@@ -199,7 +199,7 @@ export const AboutPage: React.FC = () => {
 
                   {svc.requiresLogin && (
                     <p className="text-[10px] text-center text-slate-400">
-                      Demo clinic login: <code className="text-purple-700">dr.lin@apexdentalspa.com</code>
+                      Requires practice workspace authentication
                     </p>
                   )}
                 </div>

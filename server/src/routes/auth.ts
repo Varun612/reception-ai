@@ -350,4 +350,138 @@ router.get('/me', authenticateUser, async (req: Request, res: Response) => {
   });
 });
 
+/**
+ * POST /api/auth/forgot-password
+ * Initiates single-use, time-limited password reset flow with safe non-enumerating response.
+ */
+router.post('/forgot-password', authRateLimiter, async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ error: 'Valid email address is required.' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+
+    // Uniform response prevents user enumeration
+    const genericResponse = {
+      message: 'If an account exists with this email address, password reset instructions have been generated.',
+    };
+
+    if (!user) {
+      return res.json(genericResponse);
+    }
+
+    // Generate token keyed with current password hash (single-use: auto-invalidates on password change)
+    const resetSecret = config.jwtSecret + user.passwordHash;
+    const resetToken = jwt.sign(
+      { userId: user.id, email: user.email },
+      resetSecret,
+      { expiresIn: '1h' }
+    );
+
+    const resetLink = `${config.clientUrl}/reset-password?token=${resetToken}&userId=${user.id}`;
+
+    await prisma.auditLog.create({
+      data: {
+        userId: user.id,
+        action: 'PASSWORD_RESET_REQUESTED',
+        resourceType: 'User',
+        resourceId: user.id,
+        details: JSON.stringify({ ip: req.ip }),
+      },
+    });
+
+    return res.json({
+      ...genericResponse,
+      ...(config.nodeEnv !== 'production' ? { resetLink } : {}),
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Failed to process password reset request.' });
+  }
+});
+
+/**
+ * POST /api/auth/reset-password
+ * Validates cryptographic reset token and updates password hash.
+ */
+router.post('/reset-password', authRateLimiter, async (req: Request, res: Response) => {
+  try {
+    const { userId, token, newPassword } = req.body;
+
+    if (!userId || !token || !newPassword) {
+      return res.status(400).json({ error: 'userId, token, and newPassword are required.' });
+    }
+
+    if (typeof newPassword !== 'string' || newPassword.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters long.' });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      return res.status(400).json({ error: 'Invalid or expired password reset token.' });
+    }
+
+    const resetSecret = config.jwtSecret + user.passwordHash;
+
+    try {
+      jwt.verify(token, resetSecret);
+    } catch (tokenErr) {
+      return res.status(400).json({ error: 'Invalid, expired, or already-used password reset token.' });
+    }
+
+    const newPasswordHash = await bcrypt.hash(newPassword, 10);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: newPasswordHash },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: user.id,
+        action: 'PASSWORD_RESET_COMPLETED',
+        resourceType: 'User',
+        resourceId: user.id,
+        details: JSON.stringify({ ip: req.ip }),
+      },
+    });
+
+    return res.json({
+      success: true,
+      message: 'Your password has been reset successfully. Please sign in with your new credentials.',
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Failed to reset password.' });
+  }
+});
+
+/**
+ * POST /api/auth/logout
+ * Terminates user session with audit logging.
+ */
+router.post('/logout', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    if (req.user) {
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user.id,
+          action: 'USER_LOGOUT',
+          resourceType: 'User',
+          resourceId: req.user.id,
+        },
+      });
+    }
+    return res.json({ success: true, message: 'Logged out successfully.' });
+  } catch (err) {
+    return res.json({ success: true });
+  }
+});
+
 export default router;

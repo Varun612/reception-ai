@@ -20,6 +20,7 @@ import { PrivacyPage } from './pages/public/PrivacyPage.js';
 // Auth Pages
 import { LoginPage } from './pages/auth/LoginPage.js';
 import { RegisterPage } from './pages/auth/RegisterPage.js';
+import { ResetPasswordPage } from './pages/auth/ResetPasswordPage.js';
 
 // Onboarding
 import { OnboardingWizard } from './pages/onboarding/OnboardingWizard.js';
@@ -90,6 +91,7 @@ export const App: React.FC = () => {
       {/* Auth Pages */}
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
 
       {/* Onboarding Wizard */}
       <Route

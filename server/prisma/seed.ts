@@ -79,7 +79,7 @@ async function main() {
   const adminPasswordHash = await bcrypt.hash('AdminPassword123!', 10);
   const platformAdmin = await prisma.user.upsert({
     where: { email: 'admin@receptionai.com' },
-    update: {},
+    update: { passwordHash: adminPasswordHash },
     create: {
       email: 'admin@receptionai.com',
       passwordHash: adminPasswordHash,
@@ -93,7 +93,7 @@ async function main() {
   const ownerPasswordHash = await bcrypt.hash('DentalOwner123!', 10);
   const drLinUser = await prisma.user.upsert({
     where: { email: 'dr.lin@apexdentalspa.com' },
-    update: {},
+    update: { passwordHash: ownerPasswordHash },
     create: {
       email: 'dr.lin@apexdentalspa.com',
       passwordHash: ownerPasswordHash,
@@ -345,6 +345,10 @@ async function main() {
     },
   });
 
+  // Clean prior appointments and customers for Apex to ensure seed is 100% idempotent
+  await prisma.appointment.deleteMany({ where: { tenantId: apexTenant.id } });
+  await prisma.customer.deleteMany({ where: { tenantId: apexTenant.id } });
+
   // Sample Customers
   const customerAlice = await prisma.customer.create({
     data: {
@@ -410,8 +414,18 @@ async function main() {
 
   // Usage Record
   const currentPeriod = new Date().toISOString().substring(0, 7);
-  await prisma.usageRecord.create({
-    data: {
+  await prisma.usageRecord.upsert({
+    where: {
+      tenantId_period: {
+        tenantId: apexTenant.id,
+        period: currentPeriod,
+      },
+    },
+    update: {
+      conversationCount: 142,
+      appointmentCount: 28,
+    },
+    create: {
       tenantId: apexTenant.id,
       period: currentPeriod,
       conversationCount: 142,
@@ -423,7 +437,7 @@ async function main() {
   const ukOwnerPasswordHash = await bcrypt.hash('LondonDental123!', 10);
   const drSmithUser = await prisma.user.upsert({
     where: { email: 'dr.smith@smilecraft.co.uk' },
-    update: {},
+    update: { passwordHash: ukOwnerPasswordHash },
     create: {
       email: 'dr.smith@smilecraft.co.uk',
       passwordHash: ukOwnerPasswordHash,

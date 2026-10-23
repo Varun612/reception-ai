@@ -24,6 +24,21 @@ app.use(cors({
   credentials: true,
 }));
 
+// Production Security Headers
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  
+  // Allow framing only on embed routes
+  if (req.path.startsWith('/embed') || req.path.startsWith('/widget.js') || req.path.startsWith('/api/widget') || req.path.startsWith('/book-chat')) {
+    res.setHeader('X-Frame-Options', 'ALLOWALL');
+  } else {
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  }
+  next();
+});
+
 app.use(express.json());
 
 // Duplicate Click & Rapid Request Mitigation Middleware (Idempotency Engine)
@@ -159,8 +174,19 @@ app.use(errorHandler);
 const isRunningTest = process.env.NODE_ENV === 'test' || process.argv.some(arg => arg.includes('test') || arg.includes('runner'));
 
 if (!isRunningTest) {
+  // Validate Production Environment Variables Safely
+  if (config.nodeEnv === 'production') {
+    if (!process.env.JWT_SECRET || process.env.JWT_SECRET.includes('dev_secret')) {
+      console.warn('⚠️ [SECURITY] Default or unconfigured JWT_SECRET in production. Enforcing secure random key.');
+      import('crypto').then(crypto => {
+        config.jwtSecret = crypto.randomBytes(32).toString('hex');
+      });
+    }
+  }
+
   app.listen(config.port, () => {
     console.log(`[ReceptionAI Server] Listening on port ${config.port} in ${config.nodeEnv} mode`);
-    console.log(`[ReceptionAI Server] Database URL: ${process.env.DATABASE_URL}`);
+    console.log(`[ReceptionAI Server] Database URL: ${process.env.DATABASE_URL ? 'Connected' : 'Missing'}`);
+    console.log(`[ReceptionAI Security] Multi-Tenant Scoping & Security Headers Active.`);
   });
 }

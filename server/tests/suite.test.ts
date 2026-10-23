@@ -450,8 +450,161 @@ export async function runAllTests() {
       console.log('  ✔ Super-admin telemetry verified: Global duplicate request mitigation monitored');
     }
 
+    // ----------------------------------------------------
+    // TEST 9: Password Reset Security & Single-Use Tokens
+    // ----------------------------------------------------
+    console.log('\n▶ [TEST 9] Password Reset Security & Single-Use Token Invalidation');
+    {
+      // 1. Forgot password with nonexistent email (Safe generic message)
+      const nonExistentRes = await request(app)
+        .post('/api/auth/forgot-password')
+        .send({ email: 'nonexistent@clinic-fake.com' });
+
+      assert.strictEqual(nonExistentRes.status, 200);
+      assert.ok(nonExistentRes.body.message.includes('password reset instructions have been generated'));
+      console.log('  ✔ Non-enumerating response verified for non-existent accounts');
+
+      // 2. Forgot password for real clinic user
+      const forgotRes = await request(app)
+        .post('/api/auth/forgot-password')
+        .send({ email: 'dr.lin@apexdentalspa.com' });
+
+      assert.strictEqual(forgotRes.status, 200);
+      assert.ok(forgotRes.body.resetLink, 'Reset link must be generated in development mode');
+      console.log('  ✔ Password reset token generated for registered practice owner');
+
+      const urlObj = new URL(forgotRes.body.resetLink);
+      const token = urlObj.searchParams.get('token')!;
+      const userId = urlObj.searchParams.get('userId')!;
+
+      // 3. Attempt reset with invalid/tampered token
+      const tamperedRes = await request(app)
+        .post('/api/auth/reset-password')
+        .send({ userId, token: 'tampered-invalid-jwt-token', newPassword: 'BrandNewPassword123!' });
+
+      assert.strictEqual(tamperedRes.status, 400);
+      console.log('  ✔ Tampered token safely rejected (400 Bad Request)');
+
+      // 4. Attempt reset with weak password (<8 characters)
+      const weakPassRes = await request(app)
+        .post('/api/auth/reset-password')
+        .send({ userId, token, newPassword: 'short' });
+
+      assert.strictEqual(weakPassRes.status, 400);
+      console.log('  ✔ Weak password safely rejected (<8 characters)');
+
+      // 5. Successful password reset
+      const resetSuccessRes = await request(app)
+        .post('/api/auth/reset-password')
+        .send({ userId, token, newPassword: 'UpdatedSecurePass2026!' });
+
+      assert.strictEqual(resetSuccessRes.status, 200);
+      console.log('  ✔ Password successfully updated with valid cryptographic token');
+
+      // 6. Old password must now fail
+      const oldLoginRes = await request(app)
+        .post('/api/auth/login')
+        .send({ email: 'dr.lin@apexdentalspa.com', password: 'DentalOwner123!' });
+
+      assert.strictEqual(oldLoginRes.status, 401);
+      console.log('  ✔ Prior password immediately invalidated');
+
+      // 7. Token single-use check: Attempting to use the SAME token again must fail
+      const reuseTokenRes = await request(app)
+        .post('/api/auth/reset-password')
+        .send({ userId, token, newPassword: 'AnotherPassword123!' });
+
+      assert.strictEqual(reuseTokenRes.status, 400);
+      console.log('  ✔ Single-use token enforcement verified: token auto-invalidated after password change');
+
+      // 8. New password login succeeds
+      const newLoginRes = await request(app)
+        .post('/api/auth/login')
+        .send({ email: 'dr.lin@apexdentalspa.com', password: 'UpdatedSecurePass2026!' });
+
+      assert.strictEqual(newLoginRes.status, 200);
+      console.log('  ✔ Sign in with updated credentials confirmed');
+
+      // 9. Reset password back to original seed password to preserve standard credentials
+      const restoreForgot = await request(app)
+        .post('/api/auth/forgot-password')
+        .send({ email: 'dr.lin@apexdentalspa.com' });
+      const restoreUrl = new URL(restoreForgot.body.resetLink);
+      await request(app)
+        .post('/api/auth/reset-password')
+        .send({
+          userId: restoreUrl.searchParams.get('userId')!,
+          token: restoreUrl.searchParams.get('token')!,
+          newPassword: 'DentalOwner123!',
+        });
+      console.log('  ✔ Seed credentials safely restored for continuous testing');
+    }
+
+    // ----------------------------------------------------
+    // TEST 10: Cross-Tenant IDOR Attack Verification & Security Headers
+    // ----------------------------------------------------
+    console.log('\n▶ [TEST 10] Cross-Tenant IDOR Attack Verification & Security Headers');
+    {
+      // 1. Verify Production Security Headers
+      const headersRes = await request(app).get('/health');
+      assert.strictEqual(headersRes.headers['x-content-type-options'], 'nosniff');
+      assert.strictEqual(headersRes.headers['x-frame-options'], 'SAMEORIGIN');
+      assert.strictEqual(headersRes.headers['referrer-policy'], 'strict-origin-when-cross-origin');
+      console.log('  ✔ Enterprise security headers verified (nosniff, SAMEORIGIN, strict-origin)');
+
+      // 2. Fetch an Apex service to attack from UK tenant
+      const apexService = await prisma.service.findFirst({
+        where: { tenantId: apexTenantId },
+      });
+      assert.ok(apexService);
+
+      // UK tenant attempts to modify Apex's service
+      const idorServiceRes = await request(app)
+        .put(`/api/tenants/${ukTenantId}/services/${apexService.id}`)
+        .set('Authorization', `Bearer ${ukToken}`)
+        .send({ price: 1.0 });
+
+      assert.strictEqual(idorServiceRes.status, 404, 'IDOR service update must be rejected with 404 Not Found');
+      console.log('  ✔ IDOR attack blocked: Tenant cannot modify another practice\'s service catalogue');
+
+      // 3. Fetch an Apex staff member to attack from UK tenant
+      const apexStaff = await prisma.staffMember.findFirst({
+        where: { tenantId: apexTenantId },
+      });
+      assert.ok(apexStaff);
+
+      // UK tenant attempts to delete Apex's staff member
+      const idorStaffRes = await request(app)
+        .delete(`/api/tenants/${ukTenantId}/staff/${apexStaff.id}`)
+        .set('Authorization', `Bearer ${ukToken}`);
+
+      assert.strictEqual(idorStaffRes.status, 404, 'IDOR staff deletion must be rejected with 404 Not Found');
+      console.log('  ✔ IDOR attack blocked: Tenant cannot delete another practice\'s staff records');
+
+      // 4. UK tenant attempts to view Apex's telephony call logs
+      const idorCallsRes = await request(app)
+        .get(`/api/tenants/${apexTenantId}/calls`)
+        .set('Authorization', `Bearer ${ukToken}`);
+
+      assert.strictEqual(idorCallsRes.status, 403, 'Cross-tenant call logs must be rejected with 403 Forbidden');
+      console.log('  ✔ Cross-tenant telephony logs strictly blocked (403 Forbidden)');
+
+      // 5. Unauthenticated request to protected endpoints
+      const unauthRes = await request(app).get(`/api/tenants/${apexTenantId}/appointments`);
+      assert.strictEqual(unauthRes.status, 401, 'Unauthenticated request must be rejected with 401');
+      console.log('  ✔ Unauthenticated API requests rejected (401 Unauthorized)');
+
+      // 6. Non-admin privilege escalation attempt
+      const privEscRes = await request(app)
+        .post(`/api/admin/tenants/${apexTenantId}/toggle-status`)
+        .set('Authorization', `Bearer ${apexToken}`);
+
+      assert.strictEqual(privEscRes.status, 403, 'Non-admin cannot access super-admin endpoints');
+      console.log('  ✔ Privilege escalation blocked: clinic owners cannot execute super-admin operations');
+    }
+
     console.log('\n=============================================');
-    console.log('   ALL TESTS PASSED SUCCESSFULLY! (8/8)');
+    console.log('   ALL TESTS PASSED SUCCESSFULLY! (10/10)');
     console.log('=============================================\n');
     process.exit(0);
   } catch (err: any) {

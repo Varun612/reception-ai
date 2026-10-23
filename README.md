@@ -4,7 +4,7 @@
 [![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev/)
 [![Prisma](https://img.shields.io/badge/Prisma-6.4-2D3748.svg)](https://www.prisma.io/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-38B2AC.svg)](https://tailwindcss.com/)
-[![Tests](https://img.shields.io/badge/Tests-Passing%20(8%2F8)-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-Passing%20(10%2F10)-brightgreen.svg)]()
 
 > **"Your AI Receptionist. Always Ready."**  
 > Answer more inquiries, book more appointments, and give every patient a better first impression.
@@ -121,7 +121,17 @@ npm run db:seed
 ```bash
 npm test
 ```
-*Executes all 8 integration test suites: Authentication, Multi-Tenant Data Isolation, Concurrency Double-Booking Prevention, Dental Safety Triage, Public Chat Widget, Super-Admin Control Plane, AI Phone Receptionist with Call-to-Chat & Dual Confirmations, and Multi-Click Deduplication with Customer Telemetry.*
+*Executes all 10 integration test suites:*
+1. Authentication & Tenant Resolution
+2. Multi-Tenant Data Isolation & Access Controls
+3. Slot Availability & Double-Booking Concurrency Control
+4. AI Agent Engine & Dental Safety Guardrails
+5. Public Website Widget Endpoint
+6. Super-Admin Platform Security
+7. AI Phone Receptionist, Call-to-Chat Revert & Dual Confirmations
+8. Multi-Click Deduplication, Server Idempotency & Customer Telemetry
+9. Password Reset Security & Single-Use Token Invalidation
+10. Cross-Tenant IDOR Attack Verification & Security Headers
 
 ### Step 4: Start Applications
 ```bash
@@ -138,33 +148,59 @@ Visit **`http://localhost:5180`** in your browser.
 
 ---
 
-## 4. Pre-configured Demo Accounts
+## 4. Evaluation Credentials & Sandbox Demo
 
-| Role | Email | Password | Details |
+For safe client demonstrations and portfolio evaluation, prospective clients can evaluate ReceptionAI via two paths:
+
+1. **Zero-Risk Interactive Sandbox:** Visit [`/demo`](https://reception-ai-frontend.onrender.com/demo) to test simulated conversational booking and triage guardrails without authentication.
+2. **Dedicated Practice Test Accounts (Seeded Demo):**
+
+| Role | Email | Password | Access Details |
 |---|---|---|---|
-| **Platform Super-Admin** | `admin@receptionai.com` | `AdminPassword123!` | Full control plane, platform metrics, and tenant management |
-| **US Dental Clinic Owner** | `dr.lin@apexdentalspa.com` | `DentalOwner123!` | Apex Dental Spa (Austin, TX) with real services, providers & slots |
+| **Platform Super-Admin** | `admin@receptionai.com` | `AdminPassword123!` | Multi-tenant MRR metrics, tenant suspension, global telemetry |
+| **US Dental Clinic Owner** | `dr.lin@apexdentalspa.com` | `DentalOwner123!` | Apex Dental Spa (Austin, TX) calendar, voice studio, services |
 | **UK Dental Clinic Owner** | `dr.smith@smilecraft.co.uk` | `LondonDental123!` | SmileCraft London (GBP, UK timezone) for tenant isolation testing |
 
-*Tip: The login page includes quick 1-click test buttons to populate these credentials instantly.*
+> 🔒 **Security Notice:** Public one-click login bypasses have been removed from the login screen in accordance with enterprise security best practices. Authentication is strictly validated by server-side JWT signatures, bcrypt verification, and IP-scoped rate limiters.
 
 ---
 
 ## 5. Website Widget Embedding
 
-Add the AI receptionist to any website by pasting this snippet before `</body>`:
+Add the AI receptionist to any dental practice website by pasting this single snippet before `</body>`:
 
 ```html
 <script 
-  src="http://localhost:5050/widget.js" 
+  src="https://reception-ai-backend-djdq.onrender.com/widget.js" 
   data-tenant="apex-dental-spa" 
   async>
 </script>
 ```
 
-You can customize colors, position, greeting messages, and active services directly inside the **Website Widget** dashboard menu.
+---
+
+## 6. Implementation Status & Feature Matrix
+
+| Feature Module | Implementation Status | Production Behavior |
+| :--- | :--- | :--- |
+| **Multi-Tenant Database Engine** | ✅ **Live / Production** | 18 relational Prisma models with strict tenant scoping in all queries. |
+| **Authentication & RBAC** | ✅ **Live / Production** | Bcrypt (10 rounds), signed JWT tokens, single-use password reset tokens, rate limiting. |
+| **Double-Booking Prevention** | ✅ **Live / Production** | Database transaction locks and real chair conflict detection. |
+| **Multi-Click Deduplication** | ✅ **Live / Production** | Synchronous in-memory locking + Prisma `IdempotencyRecord` table. |
+| **Customer Journey Telemetry** | ✅ **Live / Production** | Session tracking, drop-off funnels, and saved click counters for clinics and admins. |
+| **Deterministic AI Agent** | ✅ **Live / Production** | Server tool-calling pipeline (`search_services`, `check_availability`, `create_appointment`). |
+| **Dental Safety Guardrails** | ✅ **Live / Production** | Built-in triage for swelling, trauma, airway restrictions; refuses drug prescriptions. |
+| **In-Browser Audio Recording** | ✅ **Live / Production** | HTML5 MediaRecorder captures microphone audio for custom practice greetings. |
+| **Call-to-Chat SMS Revert** | 🟡 **Simulated / Sandbox** | Dispatches interactive mobile chair slot link (`/book-chat/:slug`) via mock SMS queue. Connect `TWILIO_ACCOUNT_SID` for live telephony carrier routing. |
+| **Stripe Subscription Billing** | 🟡 **Sandbox / Mock Mode** | Simulated checkout and webhook entitlements enabled by default (`STRIPE_MOCK_MODE=true`). Set `STRIPE_SECRET_KEY` for live card payments. |
+| **External Google Calendar Sync** | 🟡 **Architecture Ready** | Provider interface built; requires Google OAuth Cloud client credentials. |
 
 ---
 
-## 6. License & Compliance
-Proprietary software architected for HIPAA-compliant administrative scheduling. See [INTEGRATIONS.md](./INTEGRATIONS.md) for legal agreements and BAA guidance.
+## 7. Healthcare Compliance & Production Launch Checklist
+
+- [x] **Strict Tenant Isolation:** Cross-tenant reads and writes verified blocked via 10 automated test suites.
+- [x] **No Real Patient Data:** Public demonstrations, seeded databases, and test suites utilize strictly synthetic data.
+- [x] **Production Security Headers:** `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN` (framing permitted only on `/embed` and `/widget.js`), `Referrer-Policy: strict-origin`.
+- [x] **Administrative Scheduling Scope:** Disclaimer active across all marketing and legal terms stating ReceptionAI is an administrative communication and scheduling tool, not a clinical diagnostic system.
+- [ ] **HIPAA BAA Agreement:** For US dental practices processing ePHI, a signed Business Associate Agreement must be executed prior to production onboarding.
