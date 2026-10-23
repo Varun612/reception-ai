@@ -24,10 +24,13 @@ services:
     rootDir: client
     buildCommand: npm install && npm run build
     staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://reception-ai-backend-djdq.onrender.com
     routes:
       - type: rewrite
         source: /api/*
-        destination: https://reception-ai-backend.onrender.com/api/*
+        destination: https://reception-ai-backend-djdq.onrender.com/api/*
       - type: rewrite
         source: /*
         destination: /index.html
